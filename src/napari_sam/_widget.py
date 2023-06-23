@@ -55,6 +55,10 @@ class SamWidget(QWidget):
         super().__init__()
         self.viewer = napari_viewer
 
+        
+        self.init_main_layout()
+        self.init_comboboxes()
+
         self.annotator_mode = AnnotatorMode.NONE
         self.segmentation_mode = SegmentationMode.SEMANTIC
 
@@ -66,13 +70,32 @@ class SamWidget(QWidget):
         else:
             self.device = "cuda"
 
+        self.image_name = None
+        self.image_layer = None
+        self.label_layer = None
+        self.label_layer_changes = None
+        self.label_color_mapping = None
+        self.points_layer = None
+        self.points_layer_name = "Ignore this layer1"  # "Ignore this layer <hidden>"
+        self.old_points = np.zeros(0)
+
+        self.bbox_layer = None
+        self.bbox_layer_name = "Ignore this layer2"
+
+        self.sam_model = None
+        self.sam_predictor = None
+        self.sam_logits = None
+        self.sam_features = None
+
+
+        self.points = defaultdict(list)
+        self.point_label = None
+
+        self.bboxes = defaultdict(list)
+
+#################### GUI and general interactions ####################
+    def init_main_layout(self):
         main_layout = QVBoxLayout()
-
-        # self.scroll_area = QScrollArea()
-        # self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-        # self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-        # self.scroll_area.setWidgetResizable(True)
-
         self.layer_types = {"image": napari.layers.image.image.Image, "labels": napari.layers.labels.labels.Labels}
 
         l_model_type = QLabel("Select model type:")
@@ -117,15 +140,8 @@ class SamWidget(QWidget):
         self.l_annotation.addWidget(self.rb_click)
         self.rb_click.clicked.connect(self.on_everything_mode_checked)
 
-        # self.rb_bbox = QRadioButton("Bounding Box (WIP)")
-        # self.rb_bbox.setEnabled(False)
-        # self.rb_bbox.setToolTip("This mode is still Work In Progress (WIP)")
-        # self.rb_bbox.setStyleSheet("color: gray")
-        # self.l_annotation.addWidget(self.rb_bbox)
-
         self.rb_auto = QRadioButton("Everything")
-        # self.rb_auto.setEnabled(False)
-        # self.rb_auto.setStyleSheet("color: gray")
+
         self.rb_auto.setToolTip("Creates automatically an instance segmentation \n"
                                             "of the entire image.\n"
                                             "No user interaction possible.")
@@ -146,8 +162,6 @@ class SamWidget(QWidget):
                                  "should be given the same label by the user.\n \n"
                                  "The current label can be changed by the user \n"
                                  "on the labels layer pane after selecting the labels layer.")
-        # self.rb_semantic.setEnabled(False)
-        # self.rb_semantic.setStyleSheet("color: gray")
         self.l_segmentation.addWidget(self.rb_semantic)
 
         self.rb_instance = QRadioButton("Instance")
@@ -157,8 +171,6 @@ class SamWidget(QWidget):
                                  "but each object should be given a unique label by the user. \n \n"
                                  "The current label can be changed by the user \n"
                                  "on the labels layer pane after selecting the labels layer.")
-        # self.rb_instance.setEnabled(False)
-        # self.rb_instance.setStyleSheet("color: gray")
         self.l_segmentation.addWidget(self.rb_instance)
 
         self.rb_semantic.clicked.connect(self.on_segmentation_mode_changed)
@@ -254,35 +266,11 @@ class SamWidget(QWidget):
         main_layout.addWidget(self.scroll_area_auto)
 
         self.setLayout(main_layout)
-
-        self.image_name = None
-        self.image_layer = None
-        self.label_layer = None
-        self.label_layer_changes = None
-        self.label_color_mapping = None
-        self.points_layer = None
-        self.points_layer_name = "Ignore this layer1"  # "Ignore this layer <hidden>"
-        self.old_points = np.zeros(0)
+        
         self.point_size = 10
         self.le_point_size.setText(str(self.point_size))
-        self.bbox_layer = None
-        self.bbox_layer_name = "Ignore this layer2"
         self.bbox_edge_width = 10
         self.le_bbox_edge_width.setText(str(self.bbox_edge_width))
-
-        self.init_comboboxes()
-
-        self.sam_model = None
-        self.sam_predictor = None
-        self.sam_logits = None
-        self.sam_features = None
-
-        self.points = defaultdict(list)
-        self.point_label = None
-
-        self.bboxes = defaultdict(list)
-
-        # self.viewer.window.qt_viewer.layers.model().filterAcceptsRow = self._myfilter
 
     def init_auto_mode_settings(self):
         container_widget_auto = QWidget()
@@ -411,84 +399,6 @@ class SamWidget(QWidget):
         scroll_area_auto.hide()
         return scroll_area_auto
 
-    def on_segmentation_mode_changed(self):
-        if self.rb_semantic.isChecked():
-            self.segmentation_mode = SegmentationMode.SEMANTIC
-        if self.rb_instance.isChecked():
-            self.segmentation_mode = SegmentationMode.INSTANCE
-
-    def on_everything_mode_checked(self):
-        if self.rb_auto.isChecked():
-            self.rb_semantic.setEnabled(False)
-            self.rb_semantic.setChecked(False)
-            self.rb_semantic.setStyleSheet("color: gray")
-            self.rb_instance.setChecked(True)
-            self.scroll_area_auto.show()
-            self.btn_activate.setText("Run")
-        else:
-            self.rb_semantic.setEnabled(True)
-            self.rb_semantic.setStyleSheet("")
-            self.scroll_area_auto.hide()
-            self.btn_activate.setText("Activate")
-
-    def on_image_change(self):
-        # image_name = self.cb_image_layers.currentText()
-        # if image_name != "" and self.viewer.layers[image_name].ndim > 2:
-        #     self.rb_auto.setEnabled(False)
-        #     self.rb_auto.setChecked(False)
-        #     self.rb_click.setChecked(True)
-        #     self.rb_auto.setStyleSheet("color: gray")
-        # else:
-        #     self.rb_auto.setEnabled(True)
-        #     self.rb_auto.setStyleSheet("")
-        pass
-
-    def init_model_type_combobox(self):
-        model_types = list(SAM_MODELS.keys())
-        cached_weight_types = self.get_cached_weight_types(model_types)
-        # entries = []
-        # for name, is_cached in cached_weight_types.items():
-        #     if is_cached:
-        #         entries.append("{} (Cached)".format(name))
-        #     else:
-        #         entries.append("{} (Auto-Download)".format(name))
-        # self.cb_model_type.addItems(entries)
-        self.update_model_type_combobox()
-
-        if cached_weight_types[list(cached_weight_types.keys())[self.cb_model_type.currentIndex()]]:
-            self.btn_load_model.setText("Load model")
-        else:
-            self.btn_load_model.setText("Download and load model")
-
-        self.cb_model_type.currentTextChanged.connect(self.on_model_type_combobox_change)
-
-    def update_model_type_combobox(self):
-        model_types = list(SAM_MODELS.keys())
-        cached_weight_types = self.get_cached_weight_types(model_types)
-        entries = []
-        for name, is_cached in cached_weight_types.items():
-            if name == self.loaded_model:
-                entries.append("{} (Loaded)".format(name))
-            elif is_cached:
-                entries.append("{} (Cached)".format(name))
-            else:
-                entries.append("{} (Auto-Download)".format(name))
-        self.cb_model_type.clear()
-        self.cb_model_type.addItems(entries)
-        if self.loaded_model is not None:
-            loaded_model_index = self.cb_model_type.findText("{} (Loaded)".format(self.loaded_model))
-            self.cb_model_type.setCurrentIndex(loaded_model_index)
-
-
-    def on_model_type_combobox_change(self):
-        model_types = list(SAM_MODELS.keys())
-        cached_weight_types = self.get_cached_weight_types(model_types)
-
-        if cached_weight_types[list(cached_weight_types.keys())[self.cb_model_type.currentIndex()]]:
-            self.btn_load_model.setText("Load model")
-        else:
-            self.btn_load_model.setText("Download and load model")
-
     def init_comboboxes(self):
         for combobox_dict in self.comboboxes:
             # If current active layer is of the same type of layer that the combobox accepts then set it as selected layer in the combobox.
@@ -524,16 +434,28 @@ class SamWidget(QWidget):
 
         self._init_comboboxes_callback()
 
-    def _on_layers_changed(self):
-        for combobox_dict in self.comboboxes:
-            layer = combobox_dict["combobox"].currentText()
-            layers = self.get_layer_names(combobox_dict["layer_type"])
-            combobox_dict["combobox"].clear()
-            combobox_dict["combobox"].addItems(layers)
-            index = combobox_dict["combobox"].findText(layer, QtCore.Qt.MatchFixedString)
-            if index >= 0:
-                combobox_dict["combobox"].setCurrentIndex(index)
-        self._on_layers_changed_callback()
+    def _init_comboboxes_callback(self):
+        self._check_activate_btn()
+        self.on_image_change()
+
+    def init_model_type_combobox(self):
+        model_types = list(SAM_MODELS.keys())
+        cached_weight_types = self.get_cached_weight_types(model_types)
+        # entries = []
+        # for name, is_cached in cached_weight_types.items():
+        #     if is_cached:
+        #         entries.append("{} (Cached)".format(name))
+        #     else:
+        #         entries.append("{} (Auto-Download)".format(name))
+        # self.cb_model_type.addItems(entries)
+        self.update_model_type_combobox()
+
+        if cached_weight_types[list(cached_weight_types.keys())[self.cb_model_type.currentIndex()]]:
+            self.btn_load_model.setText("Load model")
+        else:
+            self.btn_load_model.setText("Download and load model")
+
+        self.cb_model_type.currentTextChanged.connect(self.on_model_type_combobox_change)
 
     def get_layer_names(self, type="all", exclude_hidden=True):
         layers = self.viewer.layers
@@ -543,36 +465,28 @@ class SamWidget(QWidget):
                 filtered_layers.append(layer.name)
         return filtered_layers
 
-    def _init_comboboxes_callback(self):
-        self._check_activate_btn()
-        self.on_image_change()
-
-    def _on_layers_changed_callback(self):
-        self._check_activate_btn()
-        if (self.image_layer is not None and self.image_layer not in self.viewer.layers) or (self.label_layer is not None and self.label_layer not in self.viewer.layers):
-            self._deactivate()
+    def update_model_type_combobox(self):
+        model_types = list(SAM_MODELS.keys())
+        cached_weight_types = self.get_cached_weight_types(model_types)
+        entries = []
+        for name, is_cached in cached_weight_types.items():
+            if name == self.loaded_model:
+                entries.append("{} (Loaded)".format(name))
+            elif is_cached:
+                entries.append("{} (Cached)".format(name))
+            else:
+                entries.append("{} (Auto-Download)".format(name))
+        self.cb_model_type.clear()
+        self.cb_model_type.addItems(entries)
+        if self.loaded_model is not None:
+            loaded_model_index = self.cb_model_type.findText("{} (Loaded)".format(self.loaded_model))
+            self.cb_model_type.setCurrentIndex(loaded_model_index)
 
     def _check_activate_btn(self):
         if self.cb_image_layers.currentText() != "" and self.cb_label_layers.currentText() != "" and self.loaded_model is not None:
             self.btn_activate.setEnabled(True)
         else:
             self.btn_activate.setEnabled(False)
-
-    def _load_model(self):
-        self.cb_model_type.setEnabled(False)
-        self.btn_load_model.setEnabled(False)
-        model_types = list(SAM_MODELS.keys())
-        model_type = model_types[self.cb_model_type.currentIndex()]
-        self.sam_model = SAM_MODELS[model_type]["model"](
-            self.get_weights_path(model_type)
-        )
-        self.sam_model.to(self.device)
-        self.sam_predictor = SamPredictor(self.sam_model)
-        self.loaded_model = model_type
-        self.update_model_type_combobox()
-        self.cb_model_type.setEnabled(True)
-        self.btn_load_model.setEnabled(True)
-        self._check_activate_btn()
 
     def _activate(self):
         self.btn_activate.setEnabled(False)
@@ -772,6 +686,30 @@ class SamWidget(QWidget):
         self.rb_instance.setStyleSheet("")
         self._reset_history()
 
+    def remove_all_widget_callbacks(self, layer):
+        callback_types = ['mouse_double_click_callbacks', 'mouse_drag_callbacks', 'mouse_move_callbacks',
+                          'mouse_wheel_callbacks', 'keymap']
+        for callback_type in callback_types:
+            callbacks = getattr(layer, callback_type)
+            if isinstance(callbacks, list):
+                for callback in callbacks:
+                    if inspect.ismethod(callback) and callback.__self__ == self:
+                        callbacks.remove(callback)
+            elif isinstance(callbacks, dict):
+                for key in list(callbacks.keys()):
+                    if inspect.ismethod(callbacks[key]) and callbacks[key].__self__ == self:
+                        del callbacks[key]
+            else:
+                raise RuntimeError("Could not determine callbacks type.")
+
+    def create_label_color_mapping(self, num_labels=1000):
+        if self.label_layer is not None:
+            self.label_color_mapping = {"label_mapping": {}, "color_mapping": {}}
+            for label in range(num_labels):
+                color = self.label_layer.get_color(label)
+                self.label_color_mapping["label_mapping"][label] = color
+                self.label_color_mapping["color_mapping"][str(color)] = label
+
     def _switch_mode(self):
         if self.annotator_mode == AnnotatorMode.CLICK:
             self.btn_mode_switch.setText("Switch to Click Mode")
@@ -793,13 +731,78 @@ class SamWidget(QWidget):
             else:
                 self.rb_instance.setChecked(True)
 
-    def create_label_color_mapping(self, num_labels=1000):
-        if self.label_layer is not None:
-            self.label_color_mapping = {"label_mapping": {}, "color_mapping": {}}
-            for label in range(num_labels):
-                color = self.label_layer.get_color(label)
-                self.label_color_mapping["label_mapping"][label] = color
-                self.label_color_mapping["color_mapping"][str(color)] = label
+    def _load_model(self):
+        self.cb_model_type.setEnabled(False)
+        self.btn_load_model.setEnabled(False)
+        model_types = list(SAM_MODELS.keys())
+        model_type = model_types[self.cb_model_type.currentIndex()]
+        self.sam_model = SAM_MODELS[model_type]["model"](
+            self.get_weights_path(model_type)
+        )
+        self.sam_model.to(self.device)
+        self.sam_predictor = SamPredictor(self.sam_model)
+        self.loaded_model = model_type
+        self.update_model_type_combobox()
+        self.cb_model_type.setEnabled(True)
+        self.btn_load_model.setEnabled(True)
+        self._check_activate_btn()
+
+    def on_segmentation_mode_changed(self):
+        if self.rb_semantic.isChecked():
+            self.segmentation_mode = SegmentationMode.SEMANTIC
+        if self.rb_instance.isChecked():
+            self.segmentation_mode = SegmentationMode.INSTANCE
+
+    def on_everything_mode_checked(self):
+        if self.rb_auto.isChecked():
+            self.rb_semantic.setEnabled(False)
+            self.rb_semantic.setChecked(False)
+            self.rb_semantic.setStyleSheet("color: gray")
+            self.rb_instance.setChecked(True)
+            self.scroll_area_auto.show()
+            self.btn_activate.setText("Run")
+        else:
+            self.rb_semantic.setEnabled(True)
+            self.rb_semantic.setStyleSheet("")
+            self.scroll_area_auto.hide()
+            self.btn_activate.setText("Activate")
+
+    def on_image_change(self):
+        # image_name = self.cb_image_layers.currentText()
+        # if image_name != "" and self.viewer.layers[image_name].ndim > 2:
+        #     self.rb_auto.setEnabled(False)
+        #     self.rb_auto.setChecked(False)
+        #     self.rb_click.setChecked(True)
+        #     self.rb_auto.setStyleSheet("color: gray")
+        # else:
+        #     self.rb_auto.setEnabled(True)
+        #     self.rb_auto.setStyleSheet("")
+        pass
+
+    def on_model_type_combobox_change(self):
+        model_types = list(SAM_MODELS.keys())
+        cached_weight_types = self.get_cached_weight_types(model_types)
+
+        if cached_weight_types[list(cached_weight_types.keys())[self.cb_model_type.currentIndex()]]:
+            self.btn_load_model.setText("Load model")
+        else:
+            self.btn_load_model.setText("Download and load model")
+
+    def _on_layers_changed(self):
+        for combobox_dict in self.comboboxes:
+            layer = combobox_dict["combobox"].currentText()
+            layers = self.get_layer_names(combobox_dict["layer_type"])
+            combobox_dict["combobox"].clear()
+            combobox_dict["combobox"].addItems(layers)
+            index = combobox_dict["combobox"].findText(layer, QtCore.Qt.MatchFixedString)
+            if index >= 0:
+                combobox_dict["combobox"].setCurrentIndex(index)
+        self._on_layers_changed_callback()
+
+    def _on_layers_changed_callback(self):
+        self._check_activate_btn()
+        if (self.image_layer is not None and self.image_layer not in self.viewer.layers) or (self.label_layer is not None and self.label_layer not in self.viewer.layers):
+            self._deactivate()
 
     def callback_click(self, layer, event):
         data_coordinates = self.image_layer.world_to_data(event.position)
@@ -840,44 +843,10 @@ class SamWidget(QWidget):
                 coords = np.round(data_coordinates).astype(int)
                 self.do_bbox_click(coords, BboxState.RELEASE)
 
-    def on_delete(self, layer):
-        selected_points = list(self.points_layer.selected_data)
-        if len(selected_points) > 0:
-            self.points_layer.data = np.delete(self.points_layer.data, selected_points[0], axis=0)
-            self._save_history({"mode": AnnotatorMode.CLICK, "points": copy.deepcopy(self.points), "bboxes": copy.deepcopy(self.bboxes), "logits": self.sam_logits, "point_label": self.point_label})
-            deleted_point, _ = self.find_changed_point(self.old_points, self.points_layer.data)
-            label = self.find_point_label(deleted_point)
-            index_to_remove = np.where((self.points[label] == deleted_point).all(axis=1))[0]
-            self.points[label] = np.delete(self.points[label], index_to_remove, axis=0).tolist()
-            if len(self.points[label]) == 0:
-                del self.points[label]
-            self.point_label = label
-            if self.image_layer.ndim == 2:
-                self.sam_logits = None
-            elif self.image_layer.ndim == 3:
-                self.sam_logits[deleted_point[0]] = None
-            else:
-                raise RuntimeError("Point deletion not implemented for this dimensionality.")
-            self.predict_click(self.points, self.point_label, deleted_point, label)
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore", category=FutureWarning)
-                self.label_layer._save_history((self.label_layer_changes["indices"], self.label_layer_changes["old_values"], self.label_layer_changes["new_values"]))
-
-    def on_undo(self, layer):
-        """Undo the last paint or fill action since the view slice has changed."""
-        self.undo()
-        self.label_layer.undo()
-        self.label_layer.data = self.label_layer.data
-
-    def on_redo(self, layer):
-        """Redo any previously undone actions."""
-        self.redo()
-        self.label_layer.redo()
-        self.label_layer.data = self.label_layer.data
-
     def on_contrast_limits_change(self):
         self.set_image()
 
+#################### SAM interactions & behind the scenes ####################
     def set_image(self):
         if self.image_layer.ndim == 2:
             image = np.asarray(self.image_layer.data)
@@ -1183,50 +1152,6 @@ class SamWidget(QWidget):
         self.bbox_layer.edge_color = edge_colors
         self.bbox_layer.face_color = [(0, 0, 0, 0)] * len(bboxes_flattened)
 
-    def find_changed_point(self, old_points, new_points):
-        if len(new_points) == 0:
-            old_point = old_points
-        else:
-            old_point = np.array([x for x in old_points if not np.any((x == new_points).all(1))])
-        if len(old_points) == 0:
-            new_point = new_points
-        else:
-            new_point = np.array([x for x in new_points if not np.any((x == old_points).all(1))])
-
-        if len(old_point) == 0:
-            deleted_point = None
-        else:
-            deleted_point = old_point[0]
-
-        if len(new_point) == 0:
-            new_point = None
-        else:
-            new_point = new_point[0]
-
-        return deleted_point, new_point
-
-    def find_point_label(self, point):
-        for label, label_points in self.points.items():
-            if np.in1d(point, label_points).all(axis=0):
-                return label
-        raise RuntimeError("Could not identify label.")
-
-    def remove_all_widget_callbacks(self, layer):
-        callback_types = ['mouse_double_click_callbacks', 'mouse_drag_callbacks', 'mouse_move_callbacks',
-                          'mouse_wheel_callbacks', 'keymap']
-        for callback_type in callback_types:
-            callbacks = getattr(layer, callback_type)
-            if isinstance(callbacks, list):
-                for callback in callbacks:
-                    if inspect.ismethod(callback) and callback.__self__ == self:
-                        callbacks.remove(callback)
-            elif isinstance(callbacks, dict):
-                for key in list(callbacks.keys()):
-                    if inspect.ismethod(callbacks[key]) and callbacks[key].__self__ == self:
-                        del callbacks[key]
-            else:
-                raise RuntimeError("Could not determine callbacks type.")
-
     def find_corners(self, coords):
         # convert the coordinates to numpy arrays
         coords = np.array(coords)
@@ -1245,75 +1170,7 @@ class SamWidget(QWidget):
         bottom_right_coord = [right_idx, bottom_idx]
 
         return top_left_coord, bottom_right_coord
-
-    def _reset_history(self, event=None):
-        self._undo_history = deque()
-        self._redo_history = deque()
-
-    def _save_history(self, history_item):
-        """Save a history "atom" to the undo history.
-
-        A history "atom" is a single change operation to the array. A history
-        *item* is a collection of atoms that were applied together to make a
-        single change. For example, when dragging and painting, at each mouse
-        callback we create a history "atom", but we save all those atoms in
-        a single history item, since we would want to undo one drag in one
-        undo operation.
-
-        Parameters
-        ----------
-        history_item : 2-tuple of region prop dicts
-        """
-        self._redo_history = deque()
-        # if not self._block_saving:
-        #     self._undo_history.append([value])
-        # else:
-        #     self._undo_history[-1].append(value)
-        self._undo_history.append(history_item)
-
-    def _load_history(self, before, after, undoing=True):
-        """Load a history item and apply it to the array.
-
-        Parameters
-        ----------
-        before : list of history items
-            The list of elements from which we want to load.
-        after : list of history items
-            The list of element to which to append the loaded element. In the
-            case of an undo operation, this is the redo queue, and vice versa.
-        undoing : bool
-            Whether we are undoing (default) or redoing. In the case of
-            redoing, we apply the "after change" element of a history element
-            (the third element of the history "atom").
-
-        See Also
-        --------
-        Labels._save_history
-        """
-        if len(before) == 0:
-            return
-
-        history_item = before.pop()
-        after.append(history_item)
-
-        self.points = history_item["points"]
-        self.point_label = history_item["point_label"]
-        self.sam_logits = history_item["logits"]
-        self.bboxes = history_item["bboxes"]
-        self.update_points_layer(self.points)
-        self.update_bbox_layer(self.bboxes)
-
-    def undo(self):
-        self._load_history(
-            self._undo_history, self._redo_history, undoing=True
-        )
-
-    def redo(self):
-        self._load_history(
-            self._redo_history, self._undo_history, undoing=False
-        )
-        raise RuntimeError("Redo currently not supported.")
-
+#################### Utilities ####################
     def download_with_progress(self, url, output_file):
         # Open the URL and get the content length
         req = urllib.request.urlopen(url)
@@ -1374,6 +1231,138 @@ class SamWidget(QWidget):
                 cached_weight_types[model_type] = False
 
         return cached_weight_types
+
+#################### History ####################
+    def _reset_history(self, event=None):
+        self._undo_history = deque()
+        self._redo_history = deque()
+
+    def _save_history(self, history_item):
+        """Save a history "atom" to the undo history.
+
+        A history "atom" is a single change operation to the array. A history
+        *item* is a collection of atoms that were applied together to make a
+        single change. For example, when dragging and painting, at each mouse
+        callback we create a history "atom", but we save all those atoms in
+        a single history item, since we would want to undo one drag in one
+        undo operation.
+
+        Parameters
+        ----------
+        history_item : 2-tuple of region prop dicts
+        """
+        self._redo_history = deque()
+        # if not self._block_saving:
+        #     self._undo_history.append([value])
+        # else:
+        #     self._undo_history[-1].append(value)
+        self._undo_history.append(history_item)
+
+    def _load_history(self, before, after, undoing=True):
+        """Load a history item and apply it to the array.
+
+        Parameters
+        ----------
+        before : list of history items
+            The list of elements from which we want to load.
+        after : list of history items
+            The list of element to which to append the loaded element. In the
+            case of an undo operation, this is the redo queue, and vice versa.
+        undoing : bool
+            Whether we are undoing (default) or redoing. In the case of
+            redoing, we apply the "after change" element of a history element
+            (the third element of the history "atom").
+
+        See Also
+        --------
+        Labels._save_history
+        """
+        if len(before) == 0:
+            return
+
+        history_item = before.pop()
+        after.append(history_item)
+
+        self.points = history_item["points"]
+        self.point_label = history_item["point_label"]
+        self.sam_logits = history_item["logits"]
+        self.bboxes = history_item["bboxes"]
+        self.update_points_layer(self.points)
+        self.update_bbox_layer(self.bboxes)
+
+    def on_delete(self, layer):
+        selected_points = list(self.points_layer.selected_data)
+        if len(selected_points) > 0:
+            self.points_layer.data = np.delete(self.points_layer.data, selected_points[0], axis=0)
+            self._save_history({"mode": AnnotatorMode.CLICK, "points": copy.deepcopy(self.points), "bboxes": copy.deepcopy(self.bboxes), "logits": self.sam_logits, "point_label": self.point_label})
+            deleted_point, _ = self.find_changed_point(self.old_points, self.points_layer.data)
+            label = self.find_point_label(deleted_point)
+            index_to_remove = np.where((self.points[label] == deleted_point).all(axis=1))[0]
+            self.points[label] = np.delete(self.points[label], index_to_remove, axis=0).tolist()
+            if len(self.points[label]) == 0:
+                del self.points[label]
+            self.point_label = label
+            if self.image_layer.ndim == 2:
+                self.sam_logits = None
+            elif self.image_layer.ndim == 3:
+                self.sam_logits[deleted_point[0]] = None
+            else:
+                raise RuntimeError("Point deletion not implemented for this dimensionality.")
+            self.predict_click(self.points, self.point_label, deleted_point, label)
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=FutureWarning)
+                self.label_layer._save_history((self.label_layer_changes["indices"], self.label_layer_changes["old_values"], self.label_layer_changes["new_values"]))
+
+    def find_changed_point(self, old_points, new_points):
+        if len(new_points) == 0:
+            old_point = old_points
+        else:
+            old_point = np.array([x for x in old_points if not np.any((x == new_points).all(1))])
+        if len(old_points) == 0:
+            new_point = new_points
+        else:
+            new_point = np.array([x for x in new_points if not np.any((x == old_points).all(1))])
+
+        if len(old_point) == 0:
+            deleted_point = None
+        else:
+            deleted_point = old_point[0]
+
+        if len(new_point) == 0:
+            new_point = None
+        else:
+            new_point = new_point[0]
+
+        return deleted_point, new_point
+
+    def find_point_label(self, point):
+        for label, label_points in self.points.items():
+            if np.in1d(point, label_points).all(axis=0):
+                return label
+        raise RuntimeError("Could not identify label.")
+
+    def on_undo(self, layer):
+        """Undo the last paint or fill action since the view slice has changed."""
+        self.undo()
+        self.label_layer.undo()
+        self.label_layer.data = self.label_layer.data
+
+    def on_redo(self, layer):
+        """Redo any previously undone actions."""
+        self.redo()
+        self.label_layer.redo()
+        self.label_layer.data = self.label_layer.data
+
+    def undo(self):
+        self._load_history(
+            self._undo_history, self._redo_history, undoing=True
+        )
+
+    def redo(self):
+        self._load_history(
+            self._redo_history, self._undo_history, undoing=False
+        )
+        raise RuntimeError("Redo currently not supported.")
 
     # def _myfilter(self, row, parent):
     #     return "<hidden>" not in self.viewer.layers[row].name
