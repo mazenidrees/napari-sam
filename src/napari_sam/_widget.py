@@ -1,4 +1,4 @@
-from qtpy.QtWidgets import QVBoxLayout, QPushButton, QWidget, QLabel, QComboBox, QRadioButton, QGroupBox, QProgressBar, QApplication, QScrollArea, QLineEdit, QCheckBox
+from qtpy.QtWidgets import QVBoxLayout, QPushButton, QWidget, QLabel, QComboBox, QRadioButton, QGroupBox, QProgressBar, QApplication, QScrollArea, QLineEdit, QCheckBox, QListWidget
 from qtpy.QtGui import QIntValidator, QDoubleValidator
 # from napari_sam.QCollapsibleBox import QCollapsibleBox
 from qtpy import QtCore
@@ -49,13 +49,36 @@ SAM_MODELS = {
     "MedSAM": {"filename": "sam_vit_b_01ec64_medsam.pth", "url": "https://syncandshare.desy.de/index.php/s/yLfdFbpfEGSHJWY/download/medsam_20230423_vit_b_0.0.1.pth", "model": build_sam_vit_b},
 }
 
+class LayerSelector(QListWidget):
+    def __init__(self, viewer):
+        super().__init__()
+        self.viewer = viewer
+        self.viewer.events.layers_change.connect(self.update_layers)
+        self.update_layers()  # Update layers at startup
+
+        # connect a method to the itemSelectionChanged signal
+        self.itemSelectionChanged.connect(self.item_selected)
+
+    def update_layers(self, event=None):
+        # Remove all items
+        self.clear()
+
+        # Add all label layers
+        for layer in self.viewer.layers:
+            if isinstance(layer, napari.layers.Labels):
+                self.addItem(layer.name)
+
+    def item_selected(self):
+        # get the text of the currently selected item
+        selected_label = self.currentItem().text()
+        print(f'Selected label: {selected_label}')
 
 class SamWidget(QWidget):
     def __init__(self, napari_viewer):
         super().__init__()
         self.viewer = napari_viewer
 
-        
+        self.layer_selector = LayerSelector(self.viewer)
         self.init_main_layout()
         self.init_comboboxes()
 
@@ -264,7 +287,7 @@ class SamWidget(QWidget):
 
         self.scroll_area_auto = self.init_auto_mode_settings()
         main_layout.addWidget(self.scroll_area_auto)
-
+        main_layout.addWidget(self.layer_selector)
         self.setLayout(main_layout)
         
         self.point_size = 10
