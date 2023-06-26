@@ -39,9 +39,10 @@ SAM_MODELS = {
 }
 
 class LayerSelector(QListWidget):
-    def __init__(self, viewer):
+    def __init__(self, viewer, layer_type):
         super().__init__()
         self.viewer = viewer
+        self.layer_type = layer_type  # Save layer type
         self.viewer.events.layers_change.connect(self.update_layers)
         self.update_layers()  # Update layers at startup
 
@@ -54,14 +55,15 @@ class LayerSelector(QListWidget):
 
         # Add all label layers
         for layer in self.viewer.layers:
-            if isinstance(layer, napari.layers.Labels):
+            if isinstance(layer, self.layer_type):  # Use the stored layer type
                 self.addItem(layer.name)
 
     def item_selected(self):
         # get the text of the currently selected item
-        selected_label = self.currentItem().text()
-        print(f'Selected label: {selected_label}')
+        selected_layer = self.currentItem().text()
+        print(f'Selected label: {selected_layer}')
 
+        
 class UiElements:
     def __init__(self, viewer):
         self.layer_types = {"image": napari.layers.image.image.Image, "labels": napari.layers.labels.labels.Labels}
@@ -102,30 +104,41 @@ class UiElements:
     
     def _init_main_layout(self):
         #### adding UI elements
+        #### model selection
         l_model_type = QLabel("Select model type:")
         self.main_layout.addWidget(l_model_type)
 
-        self.cb_model_type = QComboBox()
+        self.cb_model_type = QComboBox() #### Callback function is defined below
         self.main_layout.addWidget(self.cb_model_type)
-
-        self.btn_load_model = QPushButton("Load model") #### Callback function is defined through a setter
+        
+        
+        self.btn_load_model = QPushButton("Load model") #### TODO: Callback function is defined through a setter function below 
         self.main_layout.addWidget(self.btn_load_model)
 
         self._update_model_selection_combobox_and_button()
 
-        self.layer_selector = LayerSelector(self.viewer) #### Callback function is defined through a setter
-        self.main_layout.addWidget(self.layer_selector)
+        #### input image selection
+        l_image_layer = QLabel("Select input image:")
+        self.main_layout.addWidget(l_image_layer)
+
+        self.label_selector = LayerSelector(self.viewer, napari.layers.Image) #### no callback function
+        self.main_layout.addWidget(self.label_selector)
+
+        #### label layer selection
+        l_label_layer = QLabel("Select class:")
+        self.main_layout.addWidget(l_label_layer)
+
+        self.label_selector = LayerSelector(self.viewer, napari.layers.Labels) #### Callback function is defined through a setter function below
+        self.main_layout.addWidget(self.label_selector)
 
         #### connecting signals for pure UI elements interactions
         self.cb_model_type.currentTextChanged.connect(self._update_model_selection_combobox_and_button)
 
         """ 
         #### input image selection
-        l_image_layer = QLabel("Select input image layer:")
-        self.main_layout.addWidget(l_image_layer)
 
-        self.cb_image_layers = QComboBox()
-        self.cb_image_layers.addItems(self.get_layer_names("image"))
+
+
         self.cb_image_layers.currentTextChanged.connect(self.on_image_change)
         self.main_layout.addWidget(self.cb_image_layers)
 
@@ -346,3 +359,19 @@ def get_cached_models(SAM_MODELS: dict, loaded_model: str) -> tuple:
     return cached_models, entries
 
 
+def update_image_layers(viewer):
+    """
+    This function updates the list of image layers in the viewer and returns those as a list.
+
+    Parameters:
+    viewer (napari.Viewer): The image viewer.
+
+    Returns:
+    list[napari.layers.Image]: The list of image layers in the viewer.
+    """
+    # Here I'm just getting the image layers as they are.
+    # You may want to add, remove or modify layers based on your requirements.
+    image_layers = [layer for layer in viewer.layers if isinstance(layer, napari.layers.Image)]
+    
+    # Return the list of image layers
+    return image_layers
