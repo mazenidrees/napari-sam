@@ -108,8 +108,30 @@ class UiElements:
         self.viewer = viewer
         self.annotator_mode = AnnotatorMode.NONE
 
+        #### overview of interactive UI elements ####
         self.cached_models = None
         self.loaded_model = None
+
+        self.cb_model_type = None
+        self.btn_load_model = None
+        self.ls_image_selector = None
+        self.rb_click_mode = None
+        self.rb_auto_mode = None
+        self.ls_label_selector = None
+        self.btn_activate = None
+
+        self.le_points_per_side = None
+        self.le_points_per_batch = None
+        self.le_pred_iou_thresh = None
+        self.le_stability_score_thresh = None
+        self.le_stability_score_offset = None
+        self.le_box_nms_thresh = None
+        self.le_crop_n_layers = None
+        self.le_crop_nms_thresh = None
+        self.le_crop_overlap_ratio = None
+        self.le_crop_n_points_downscale_factor = None
+        self.le_min_mask_region_area = None
+        
 
         self._init_main_layout()
         self._init_UI_signals()
@@ -140,10 +162,10 @@ class UiElements:
     def _init_image_selection(self):
         l_image_layer = QLabel("Select input image:")
         self.main_layout.addWidget(l_image_layer)
-
-        self.label_selector = LayerSelector(self.viewer, napari.layers.Image)  # No callback function
-        self.label_selector.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
-        self.main_layout.addWidget(self.label_selector)
+        
+        self.ls_image_selector = LayerSelector(self.viewer, napari.layers.Image) #### TODO: Callback function is defined externally through a setter function below
+        self.ls_image_selector.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+        self.main_layout.addWidget(self.ls_image_selector)
 
     def _init_annotation_mode(self):
         self.g_annotation = QGroupBox("Annotation mode")
@@ -160,24 +182,24 @@ class UiElements:
         )
         self.l_annotation.addWidget(self.rb_click)
 
-        self.rb_auto = QRadioButton("Automatic mask generation")
-        self.rb_auto.setToolTip(
+        self.rb_auto_mode = QRadioButton("Automatic mask generation")
+        self.rb_auto_mode.setToolTip(
             "Creates automatically an instance segmentation \n"
             "of the entire image.\n"
             "No user interaction possible."
         )
-        self.l_annotation.addWidget(self.rb_auto)
+        self.l_annotation.addWidget(self.rb_auto_mode)
 
         self.g_annotation.setLayout(self.l_annotation)
         self.main_layout.addWidget(self.g_annotation)
 
     def _init_label_layer_selection(self):
-        l_image_layer = QLabel("Select class:")
-        self.main_layout.addWidget(l_image_layer)
+        l_label_selector = QLabel("Select class:")
+        self.main_layout.addWidget(l_label_selector)
 
-        self.image_selector = LayerSelector(self.viewer, napari.layers.Labels) #### TODO: Callback function is defined externally through a setter function below
-        self.image_selector.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
-        self.main_layout.addWidget(self.image_selector)
+        self.ls_label_selector = LayerSelector(self.viewer, napari.layers.Labels)  # No callback function
+        self.ls_label_selector.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+        self.main_layout.addWidget(self.ls_label_selector)
 
     def _init_activation_button(self):
         self.btn_activate = QPushButton("Activate")
