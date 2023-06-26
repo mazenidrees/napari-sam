@@ -1,4 +1,4 @@
-from qtpy.QtWidgets import QVBoxLayout, QPushButton, QWidget, QLabel, QComboBox, QRadioButton, QGroupBox, QProgressBar, QApplication, QScrollArea, QLineEdit, QCheckBox, QListWidget
+from qtpy.QtWidgets import QVBoxLayout, QPushButton, QWidget, QLabel, QComboBox, QRadioButton, QGroupBox, QProgressBar, QApplication, QScrollArea, QLineEdit, QCheckBox, QListWidget, QDockWidget, QSizePolicy
 from qtpy.QtGui import QIntValidator, QDoubleValidator
 # from napari_sam.QCollapsibleBox import QCollapsibleBox
 from qtpy import QtCore
@@ -58,11 +58,26 @@ class LayerSelector(QListWidget):
             if isinstance(layer, self.layer_type):  # Use the stored layer type
                 self.addItem(layer.name)
 
+        # Adjust the height of the QListWidget based on the content
+        self.adjust_height()
+
     def item_selected(self):
         # get the text of the currently selected item
         selected_layer = self.currentItem().text()
         print(f'Selected label: {selected_layer}')
 
+    def adjust_height(self):
+        # The minimum height of QListWidget
+        min_height = 100  # Set this to your desired minimum height
+
+        # Calculate the total height of all items
+        total_height = sum([self.sizeHintForRow(i) for i in range(self.count())])
+
+        # Add the spacing (margin) around items in the list
+        total_height += self.count() * self.spacing()
+
+        # Ensure the QListWidget height is not less than the minimum height
+        self.setMaximumHeight(max(total_height, min_height))
         
 class UiElements:
     def __init__(self, viewer):
@@ -76,8 +91,7 @@ class UiElements:
         self._init_main_layout()
 
         self.annotator_mode = AnnotatorMode.NONE
-
-
+    
          # dict of model_type: bool(cached)
          # list of strings: model_types (cached/loaded)
         
@@ -100,7 +114,6 @@ class UiElements:
             self.points = defaultdict(list)
             self.point_label = None
         """
-
     
     def _init_main_layout(self):
         #### adding UI elements
@@ -112,7 +125,7 @@ class UiElements:
         self.main_layout.addWidget(self.cb_model_type)
         
         
-        self.btn_load_model = QPushButton("Load model") #### TODO: Callback function is defined through a setter function below 
+        self.btn_load_model = QPushButton("Load model") #### TODO: Callback function is defined externally through a setter function below
         self.main_layout.addWidget(self.btn_load_model)
 
         self._update_model_selection_combobox_and_button()
@@ -122,6 +135,10 @@ class UiElements:
         self.main_layout.addWidget(l_image_layer)
 
         self.label_selector = LayerSelector(self.viewer, napari.layers.Image) #### no callback function
+        self.label_selector.setSizePolicy(
+            QSizePolicy.Preferred,
+            QSizePolicy.Maximum
+            )
         self.main_layout.addWidget(self.label_selector)
 
         #### annotation mode selection
@@ -137,7 +154,6 @@ class UiElements:
                                  "Delete Selected Point: Delete")
         self.l_annotation.addWidget(self.rb_click)
         
-
         self.rb_auto = QRadioButton("Automatic mask generation")
 
         self.rb_auto.setToolTip("Creates automatically an instance segmentation \n"
@@ -148,12 +164,17 @@ class UiElements:
         self.g_annotation.setLayout(self.l_annotation)
         self.main_layout.addWidget(self.g_annotation)
 
+        
         #### label layer selection
-        l_label_layer = QLabel("Select class:")
-        self.main_layout.addWidget(l_label_layer)
+        l_image_layer = QLabel("Select class:")
+        self.main_layout.addWidget(l_image_layer)
 
-        self.label_selector = LayerSelector(self.viewer, napari.layers.Labels) #### Callback function is defined through a setter function below
-        self.main_layout.addWidget(self.label_selector)
+        self.image_selector = LayerSelector(self.viewer, napari.layers.Labels) #### TODO: Callback function is defined externally through a setter function below
+        self.image_selector.setSizePolicy(
+            QSizePolicy.Preferred,
+            QSizePolicy.Maximum
+            )
+        self.main_layout.addWidget(self.image_selector)
 
 
         #### connecting signals for pure UI elements interactions
@@ -339,7 +360,6 @@ class UiElements:
         self.cb_model_type.currentTextChanged.connect(self._update_model_selection_combobox_and_button)
 
 
-
 def get_cached_models(SAM_MODELS: dict, loaded_model: str) -> tuple:
     """Check if the weights of the SAM models are cached locally."""
     model_types = list(SAM_MODELS.keys())
@@ -365,19 +385,3 @@ def get_cached_models(SAM_MODELS: dict, loaded_model: str) -> tuple:
     return cached_models, entries
 
 
-def update_image_layers(viewer):
-    """
-    This function updates the list of image layers in the viewer and returns those as a list.
-
-    Parameters:
-    viewer (napari.Viewer): The image viewer.
-
-    Returns:
-    list[napari.layers.Image]: The list of image layers in the viewer.
-    """
-    # Here I'm just getting the image layers as they are.
-    # You may want to add, remove or modify layers based on your requirements.
-    image_layers = [layer for layer in viewer.layers if isinstance(layer, napari.layers.Image)]
-    
-    # Return the list of image layers
-    return image_layers
