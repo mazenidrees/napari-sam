@@ -1,29 +1,51 @@
-from qtpy.QtWidgets import QVBoxLayout, QPushButton, QWidget, QLabel, QComboBox, QRadioButton, QGroupBox, QProgressBar, QApplication, QScrollArea, QLineEdit, QCheckBox, QListWidget, QDockWidget, QSizePolicy
-from qtpy.QtGui import QIntValidator, QDoubleValidator
 # from napari_sam.QCollapsibleBox import QCollapsibleBox
-from qtpy import QtCore
-from qtpy.QtCore import Qt
-import napari
-import numpy as np
-from enum import Enum
-from collections import deque, defaultdict
-import inspect
-from segment_anything import SamPredictor, build_sam_vit_h, build_sam_vit_l, build_sam_vit_b
-from segment_anything.automatic_mask_generator import SamAutomaticMaskGenerator
-from napari_sam.utils import normalize
-import torch
-from vispy.util.keys import CONTROL
 import copy
-import warnings
-from tqdm import tqdm
-from superqt.utils import qdebounced
-from napari_sam.slicer import slicer
-import urllib.request
-from pathlib import Path
+import inspect
 import os
+import urllib.request
+from collections import deque, defaultdict
+from enum import Enum
+from pathlib import Path
 from os.path import join
 
+import numpy as np
+import torch
+import warnings
+from tqdm import tqdm
+from vispy.util.keys import CONTROL
 
+import napari
+import qtpy
+from qtpy import QtCore
+from qtpy.QtCore import Qt
+from qtpy.QtGui import QIntValidator, QDoubleValidator
+from qtpy.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDockWidget,
+    QGroupBox,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QPushButton,
+    QProgressBar,
+    QRadioButton,
+    QScrollArea,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
+
+from napari_sam.slicer import slicer
+from napari_sam.utils import normalize
+from segment_anything import (
+    SamPredictor,
+    build_sam_vit_b,
+    build_sam_vit_h,
+    build_sam_vit_l,
+)
+from segment_anything.automatic_mask_generator import SamAutomaticMaskGenerator
 
 class AnnotatorMode(Enum):
     NONE = 0
@@ -114,74 +136,9 @@ class UiElements:
             self.points = defaultdict(list)
             self.point_label = None
         """
-    
+    ######## UI elements ########
     def _init_main_layout(self):
-        #### adding UI elements
-        #### model selection
-        l_model_type = QLabel("Select model type:")
-        self.main_layout.addWidget(l_model_type)
-
-        self.cb_model_type = QComboBox() #### Callback function is defined below
-        self.main_layout.addWidget(self.cb_model_type)
-        
-        
-        self.btn_load_model = QPushButton("Load model") #### TODO: Callback function is defined externally through a setter function below
-        self.main_layout.addWidget(self.btn_load_model)
-
-        self._update_model_selection_combobox_and_button()
-
-        #### input image selection
-        l_image_layer = QLabel("Select input image:")
-        self.main_layout.addWidget(l_image_layer)
-
-        self.label_selector = LayerSelector(self.viewer, napari.layers.Image) #### no callback function
-        self.label_selector.setSizePolicy(
-            QSizePolicy.Preferred,
-            QSizePolicy.Maximum
-            )
-        self.main_layout.addWidget(self.label_selector)
-
-        #### annotation mode selection
-        self.g_annotation = QGroupBox("Annotation mode")
-        self.l_annotation = QVBoxLayout()
-
-        self.rb_click = QRadioButton("Click && Bounding Box")
-        self.rb_click.setChecked(True)
-        self.rb_click.setToolTip("Positive Click: Middle Mouse Button\n \n"
-                                 "Negative Click: Control + Middle Mouse Button \n \n"
-                                 "Undo: Control + Z \n \n"
-                                 "Select Point: Left Click \n \n"
-                                 "Delete Selected Point: Delete")
-        self.l_annotation.addWidget(self.rb_click)
-        
-        self.rb_auto = QRadioButton("Automatic mask generation")
-
-        self.rb_auto.setToolTip("Creates automatically an instance segmentation \n"
-                                            "of the entire image.\n"
-                                            "No user interaction possible.")
-        self.l_annotation.addWidget(self.rb_auto)
-
-        self.g_annotation.setLayout(self.l_annotation)
-        self.main_layout.addWidget(self.g_annotation)
-
-        
-        #### label layer selection
-        l_image_layer = QLabel("Select class:")
-        self.main_layout.addWidget(l_image_layer)
-
-        self.image_selector = LayerSelector(self.viewer, napari.layers.Labels) #### TODO: Callback function is defined externally through a setter function below
-        self.image_selector.setSizePolicy(
-            QSizePolicy.Preferred,
-            QSizePolicy.Maximum
-            )
-        self.main_layout.addWidget(self.image_selector)
-
-
-        #### connecting signals for pure UI elements interactions
-        self.cb_model_type.currentTextChanged.connect(self._update_model_selection_combobox_and_button)
-        #self.rb_click.clicked.connect(self.on_everything_mode_checked) # TODO: change UI elements to reflect the mode
-        #self.rb_auto.clicked.connect(self.on_everything_mode_checked)  # TODO: change UI elements to reflect the mode
-
+        pass
         """ 
         #### input image selection
 
@@ -323,6 +280,74 @@ class UiElements:
         self.le_bbox_edge_width.setText(str(self.bbox_edge_width))
          """
         
+    def _init_main_layout(self):
+        self._init_model_selection()
+        self._init_image_selection()
+        self._init_annotation_mode()
+        self._init_label_layer_selection()
+        self._init_UI_signals
+
+    def _init_model_selection(self):
+        l_model_type = QLabel("Select model type:")
+        self.main_layout.addWidget(l_model_type)
+
+        self.cb_model_type = QComboBox() #### Callback function is defined below
+        self.main_layout.addWidget(self.cb_model_type)
+        
+        self.btn_load_model = QPushButton("Load model") #### TODO: Callback function is defined externally through a setter function below
+        self.main_layout.addWidget(self.btn_load_model)
+
+        self._update_model_selection_combobox_and_button()
+
+    def _init_image_selection(self):
+        l_image_layer = QLabel("Select input image:")
+        self.main_layout.addWidget(l_image_layer)
+
+        self.label_selector = LayerSelector(self.viewer, napari.layers.Image)  # No callback function
+        self.label_selector.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+        self.main_layout.addWidget(self.label_selector)
+
+    def _init_annotation_mode(self):
+        self.g_annotation = QGroupBox("Annotation mode")
+        self.l_annotation = QVBoxLayout()
+
+        self.rb_click = QRadioButton("Click && Bounding Box")
+        self.rb_click.setChecked(True)
+        self.rb_click.setToolTip(
+            "Positive Click: Middle Mouse Button\n \n"
+            "Negative Click: Control + Middle Mouse Button \n \n"
+            "Undo: Control + Z \n \n"
+            "Select Point: Left Click \n \n"
+            "Delete Selected Point: Delete"
+        )
+        self.l_annotation.addWidget(self.rb_click)
+
+        self.rb_auto = QRadioButton("Automatic mask generation")
+        self.rb_auto.setToolTip(
+            "Creates automatically an instance segmentation \n"
+            "of the entire image.\n"
+            "No user interaction possible."
+        )
+        self.l_annotation.addWidget(self.rb_auto)
+
+        self.g_annotation.setLayout(self.l_annotation)
+        self.main_layout.addWidget(self.g_annotation)
+
+    def _init_label_layer_selection(self):
+        l_image_layer = QLabel("Select class:")
+        self.main_layout.addWidget(l_image_layer)
+
+        self.image_selector = LayerSelector(self.viewer, napari.layers.Labels) #### TODO: Callback function is defined externally through a setter function below
+        self.image_selector.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+        self.main_layout.addWidget(self.image_selector)
+
+    def _init_UI_signals(self):
+        """ connecting signals for pure UI elements interactions """
+        self.cb_model_type.currentTextChanged.connect(self._update_model_selection_combobox_and_button)
+        #self.rb_click.clicked.connect(self.on_everything_mode_checked) # TODO: change UI elements to reflect the mode
+        #self.rb_auto.clicked.connect(self.on_everything_mode_checked)  # TODO: change UI elements to reflect the mode
+    ######## UI elements ######## END
+
     def _set_model_load_handler(self, handler: callable) -> None:
         """
         Sets the callback function for the load model button.
