@@ -124,6 +124,30 @@ class UiElements:
         self.label_selector = LayerSelector(self.viewer, napari.layers.Image) #### no callback function
         self.main_layout.addWidget(self.label_selector)
 
+        #### annotation mode selection
+        self.g_annotation = QGroupBox("Annotation mode")
+        self.l_annotation = QVBoxLayout()
+
+        self.rb_click = QRadioButton("Click && Bounding Box")
+        self.rb_click.setChecked(True)
+        self.rb_click.setToolTip("Positive Click: Middle Mouse Button\n \n"
+                                 "Negative Click: Control + Middle Mouse Button \n \n"
+                                 "Undo: Control + Z \n \n"
+                                 "Select Point: Left Click \n \n"
+                                 "Delete Selected Point: Delete")
+        self.l_annotation.addWidget(self.rb_click)
+        
+
+        self.rb_auto = QRadioButton("Automatic mask generation")
+
+        self.rb_auto.setToolTip("Creates automatically an instance segmentation \n"
+                                            "of the entire image.\n"
+                                            "No user interaction possible.")
+        self.l_annotation.addWidget(self.rb_auto)
+
+        self.g_annotation.setLayout(self.l_annotation)
+        self.main_layout.addWidget(self.g_annotation)
+
         #### label layer selection
         l_label_layer = QLabel("Select class:")
         self.main_layout.addWidget(l_label_layer)
@@ -131,8 +155,11 @@ class UiElements:
         self.label_selector = LayerSelector(self.viewer, napari.layers.Labels) #### Callback function is defined through a setter function below
         self.main_layout.addWidget(self.label_selector)
 
+
         #### connecting signals for pure UI elements interactions
         self.cb_model_type.currentTextChanged.connect(self._update_model_selection_combobox_and_button)
+        #self.rb_click.clicked.connect(self.on_everything_mode_checked) # TODO: change UI elements to reflect the mode
+        #self.rb_auto.clicked.connect(self.on_everything_mode_checked)  # TODO: change UI elements to reflect the mode
 
         """ 
         #### input image selection
@@ -151,29 +178,7 @@ class UiElements:
 
         self.comboboxes = [{"combobox": self.cb_image_layers, "layer_type": "image"}, {"combobox": self.cb_label_layers, "layer_type": "labels"}]
 
-        self.g_annotation = QGroupBox("Annotation mode")
-        self.l_annotation = QVBoxLayout()
 
-        self.rb_click = QRadioButton("Click && Bounding Box")
-        self.rb_click.setChecked(True)
-        self.rb_click.setToolTip("Positive Click: Middle Mouse Button\n \n"
-                                 "Negative Click: Control + Middle Mouse Button \n \n"
-                                 "Undo: Control + Z \n \n"
-                                 "Select Point: Left Click \n \n"
-                                 "Delete Selected Point: Delete")
-        self.l_annotation.addWidget(self.rb_click)
-        self.rb_click.clicked.connect(self.on_everything_mode_checked)
-
-        self.rb_auto = QRadioButton("Everything")
-
-        self.rb_auto.setToolTip("Creates automatically an instance segmentation \n"
-                                            "of the entire image.\n"
-                                            "No user interaction possible.")
-        self.l_annotation.addWidget(self.rb_auto)
-        self.rb_auto.clicked.connect(self.on_everything_mode_checked)
-
-        self.g_annotation.setLayout(self.l_annotation)
-        self.main_layout.addWidget(self.g_annotation)
 
         self.g_segmentation = QGroupBox("Segmentation mode")
         self.l_segmentation = QVBoxLayout()
@@ -332,6 +337,7 @@ class UiElements:
 
         # Reconnect the signal
         self.cb_model_type.currentTextChanged.connect(self._update_model_selection_combobox_and_button)
+
 
 
 def get_cached_models(SAM_MODELS: dict, loaded_model: str) -> tuple:
