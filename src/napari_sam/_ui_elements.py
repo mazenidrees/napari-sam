@@ -140,51 +140,6 @@ class UiElements:
     def _init_main_layout(self):
         pass
         """ 
-        #### input image selection
-
-
-
-        self.cb_image_layers.currentTextChanged.connect(self.on_image_change)
-        self.main_layout.addWidget(self.cb_image_layers)
-
-        l_label_layer = QLabel("Select output labels layer:")
-        self.main_layout.addWidget(l_label_layer)
-
-        self.cb_label_layers = QComboBox()
-        self.cb_label_layers.addItems(self.get_layer_names("labels"))
-        self.main_layout.addWidget(self.cb_label_layers)
-
-        self.comboboxes = [{"combobox": self.cb_image_layers, "layer_type": "image"}, {"combobox": self.cb_label_layers, "layer_type": "labels"}]
-
-
-
-        self.g_segmentation = QGroupBox("Segmentation mode")
-        self.l_segmentation = QVBoxLayout()
-
-        self.rb_semantic = QRadioButton("Semantic")
-        self.rb_semantic.setChecked(True)
-        self.rb_semantic.setToolTip("Enables the user to create a \n"
-                                 "multi-label (semantic) segmentation of different classes.\n \n"
-                                 "All objects from the same class \n"
-                                 "should be given the same label by the user.\n \n"
-                                 "The current label can be changed by the user \n"
-                                 "on the labels layer pane after selecting the labels layer.")
-        self.l_segmentation.addWidget(self.rb_semantic)
-
-        self.rb_instance = QRadioButton("Instance")
-        self.rb_instance.setToolTip("Enables the user to create an \n"
-                                 "instance segmentation of different objects.\n \n"
-                                 "Objects can be from the same or different classes,\n"
-                                 "but each object should be given a unique label by the user. \n \n"
-                                 "The current label can be changed by the user \n"
-                                 "on the labels layer pane after selecting the labels layer.")
-        self.l_segmentation.addWidget(self.rb_instance)
-
-        self.rb_semantic.clicked.connect(self.on_segmentation_mode_changed)
-        self.rb_instance.clicked.connect(self.on_segmentation_mode_changed)
-
-        self.g_segmentation.setLayout(self.l_segmentation)
-        self.main_layout.addWidget(self.g_segmentation)
 
         self.btn_activate = QPushButton("Activate")
         self.btn_activate.clicked.connect(self._activate)
@@ -284,6 +239,7 @@ class UiElements:
         self._init_model_selection()
         self._init_image_selection()
         self._init_annotation_mode()
+        self._init_activation_button()
         self._init_label_layer_selection()
         self._init_UI_signals
 
@@ -340,6 +296,13 @@ class UiElements:
         self.image_selector = LayerSelector(self.viewer, napari.layers.Labels) #### TODO: Callback function is defined externally through a setter function below
         self.image_selector.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
         self.main_layout.addWidget(self.image_selector)
+
+    def _init_activation_button(self):
+        self.btn_activate = QPushButton("Activate")
+        #self.btn_activate.clicked.connect(self._activate) #### TODO: Callback function is defined externally through a setter function below
+        self.btn_activate.setEnabled(False)
+        self.is_active = False
+        self.main_layout.addWidget(self.btn_activate)
 
     def _init_UI_signals(self):
         """ connecting signals for pure UI elements interactions """
