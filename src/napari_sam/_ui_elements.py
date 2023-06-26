@@ -65,7 +65,8 @@ class LayerSelector(QListWidget):
         super().__init__()
         self.viewer = viewer
         self.layer_type = layer_type  # Save layer type
-        self.viewer.events.layers_change.connect(self.update_layers)
+        self.viewer.layers.events.inserted.connect(self.update_layers)
+        self.viewer.layers.events.removed.connect(self.update_layers)
         self.update_layers()  # Update layers at startup
 
         # connect a method to the itemSelectionChanged signal
@@ -105,143 +106,24 @@ class UiElements:
     def __init__(self, viewer):
         self.layer_types = {"image": napari.layers.image.image.Image, "labels": napari.layers.labels.labels.Labels}
         self.viewer = viewer
+        self.annotator_mode = AnnotatorMode.NONE
 
         self.cached_models = None
         self.loaded_model = None
 
-        self.main_layout = QVBoxLayout()
         self._init_main_layout()
+        self._init_UI_signals()
 
-        self.annotator_mode = AnnotatorMode.NONE
-    
-         # dict of model_type: bool(cached)
-         # list of strings: model_types (cached/loaded)
-        
-        # TODO: figure out what is needed and remove the rest
-        """
-            self.image_name = None
-            self.image_layer = None
-            self.label_layer = None
-            self.label_layer_changes = None
-            self.label_color_mapping = None
-            self.points_layer = None
-            self.points_layer_name = "Ignore this layer1"  # "Ignore this layer <hidden>"
-            self.old_points = np.zeros(0)
-
-            self.sam_model = None
-            self.sam_predictor = None
-            self.sam_logits = None
-            self.sam_features = None
-
-            self.points = defaultdict(list)
-            self.point_label = None
-        """
     ######## UI elements ########
     def _init_main_layout(self):
-        pass
-        """ 
-
-        self.btn_activate = QPushButton("Activate")
-        self.btn_activate.clicked.connect(self._activate)
-        self.btn_activate.setEnabled(False)
-        self.is_active = False
-        self.main_layout.addWidget(self.btn_activate)
-
-        self.btn_mode_switch = QPushButton("Switch to BBox Mode")
-        self.btn_mode_switch.clicked.connect(self._switch_mode)
-        self.btn_mode_switch.setEnabled(False)
-        self.main_layout.addWidget(self.btn_mode_switch)
-
-        self.check_prev_mask = QCheckBox('Use previous SAM prediction (recommended)')
-        self.check_prev_mask.setEnabled(False)
-        self.check_prev_mask.setChecked(True)
-        self.main_layout.addWidget(self.check_prev_mask)
-
-        self.check_auto_inc_bbox= QCheckBox('Auto increment bounding box label')
-        self.check_auto_inc_bbox.setEnabled(False)
-        self.check_auto_inc_bbox.setChecked(True)
-        self.main_layout.addWidget(self.check_auto_inc_bbox)
-
-        container_widget_info = QWidget()
-        container_layout_info = QVBoxLayout(container_widget_info)
-
-        self.g_size = QGroupBox("Point && Bounding Box Settings")
-        self.l_size = QVBoxLayout()
-
-        l_point_size = QLabel("Point Size:")
-        self.l_size.addWidget(l_point_size)
-        validator = QIntValidator()
-        validator.setRange(0, 9999)
-        self.le_point_size = QLineEdit()
-        self.le_point_size.setText("1")
-        self.le_point_size.setValidator(validator)
-        self.l_size.addWidget(self.le_point_size)
-
-        l_bbox_edge_width = QLabel("Bounding Box Edge Width:")
-        self.l_size.addWidget(l_bbox_edge_width)
-        validator = QIntValidator()
-        validator.setRange(0, 9999)
-        self.le_bbox_edge_width = QLineEdit()
-        self.le_bbox_edge_width.setText("1")
-        self.le_bbox_edge_width.setValidator(validator)
-        self.l_size.addWidget(self.le_bbox_edge_width)
-        self.g_size.setLayout(self.l_size)
-        container_layout_info.addWidget(self.g_size)
-
-        self.g_info_tooltip = QGroupBox("Tooltip Information")
-        self.l_info_tooltip = QVBoxLayout()
-        self.label_info_tooltip = QLabel("Every mode shows further information when hovered over.")
-        self.label_info_tooltip.setWordWrap(True)
-        self.l_info_tooltip.addWidget(self.label_info_tooltip)
-        self.g_info_tooltip.setLayout(self.l_info_tooltip)
-        container_layout_info.addWidget(self.g_info_tooltip)
-
-        self.g_info_contrast = QGroupBox("Contrast Limits")
-        self.l_info_contrast = QVBoxLayout()
-        self.label_info_contrast = QLabel("SAM computes its image embedding based on the current image contrast.\n"
-                                          "Image contrast can be adjusted with the contrast slider of the image layer.")
-        self.label_info_contrast.setWordWrap(True)
-        self.l_info_contrast.addWidget(self.label_info_contrast)
-        self.g_info_contrast.setLayout(self.l_info_contrast)
-        container_layout_info.addWidget(self.g_info_contrast)
-
-        self.g_info_click = QGroupBox("Click Mode")
-        self.l_info_click = QVBoxLayout()
-        self.label_info_click = QLabel("Positive Click: Middle Mouse Button\n \n"
-                                 "Negative Click: Control + Middle Mouse Button\n \n"
-                                 "Undo: Control + Z\n \n"
-                                 "Select Point: Left Click\n \n"
-                                 "Delete Selected Point: Delete\n \n"
-                                 "Pick Label: Control + Left Click\n \n"
-                                 "Increment Label: M\n \n")
-        self.label_info_click.setWordWrap(True)
-        self.l_info_click.addWidget(self.label_info_click)
-        self.g_info_click.setLayout(self.l_info_click)
-        container_layout_info.addWidget(self.g_info_click)
-
-        scroll_area_info = QScrollArea()
-        scroll_area_info.setWidget(container_widget_info)
-        scroll_area_info.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.main_layout.addWidget(scroll_area_info)
-
-        self.scroll_area_auto = self.init_auto_mode_settings()
-        self.main_layout.addWidget(self.scroll_area_auto)
-
-        
-        
-        self.point_size = 10
-        self.le_point_size.setText(str(self.point_size))
-        self.bbox_edge_width = 10
-        self.le_bbox_edge_width.setText(str(self.bbox_edge_width))
-         """
-        
-    def _init_main_layout(self):
+        self.main_layout = QVBoxLayout()
         self._init_model_selection()
         self._init_image_selection()
         self._init_annotation_mode()
         self._init_activation_button()
         self._init_label_layer_selection()
-        self._init_UI_signals
+        self._init_tooltip()
+        self.init_auto_mode_settings()
 
     def _init_model_selection(self):
         l_model_type = QLabel("Select model type:")
@@ -303,6 +185,177 @@ class UiElements:
         self.btn_activate.setEnabled(False)
         self.is_active = False
         self.main_layout.addWidget(self.btn_activate)
+
+    def _init_tooltip(self):
+        container_widget_info = QWidget()
+        container_layout_info = QVBoxLayout(container_widget_info)
+
+
+        self.g_info_tooltip = QGroupBox("Tooltip Information")
+        self.l_info_tooltip = QVBoxLayout()
+        self.label_info_tooltip = QLabel("Every mode shows further information when hovered over.")
+        self.label_info_tooltip.setWordWrap(True)
+        self.l_info_tooltip.addWidget(self.label_info_tooltip)
+        self.g_info_tooltip.setLayout(self.l_info_tooltip)
+        container_layout_info.addWidget(self.g_info_tooltip)
+
+        """ 
+        self.g_info_contrast = QGroupBox("Contrast Limits")
+        self.l_info_contrast = QVBoxLayout()
+        self.label_info_contrast = QLabel("SAM computes its image embedding based on the current image contrast.\n"
+                                          "Image contrast can be adjusted with the contrast slider of the image layer.")
+        self.label_info_contrast.setWordWrap(True)
+        self.l_info_contrast.addWidget(self.label_info_contrast)
+        self.g_info_contrast.setLayout(self.l_info_contrast)
+        container_layout_info.addWidget(self.g_info_contrast)
+         """
+        
+        self.g_info_click = QGroupBox("Click Mode")
+        self.l_info_click = QVBoxLayout()
+        self.label_info_click = QLabel("\nPositive Click: Middle Mouse Button\n \n"
+                                 "Negative Click: Control + Middle Mouse Button\n \n"
+                                 "Undo: Control + Z\n \n"
+                                 "Select Point: Left Click\n \n"
+                                 "Delete Selected Point: Delete\n \n"
+                                 "Pick Label: Control + Left Click\n \n"
+                                 "Increment Label: M\n \n")
+        self.label_info_click.setWordWrap(True)
+        self.l_info_click.addWidget(self.label_info_click)
+        self.g_info_click.setLayout(self.l_info_click)
+        container_layout_info.addWidget(self.g_info_click)
+
+        scroll_area_info = QScrollArea()
+        scroll_area_info.setWidget(container_widget_info)
+        scroll_area_info.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.main_layout.addWidget(scroll_area_info)
+
+    def init_auto_mode_settings(self):
+        container_widget_auto = QWidget()
+        container_layout_auto = QVBoxLayout(container_widget_auto)
+
+        # self.g_auto_mode_settings = QCollapsibleBox("Everything Mode Settings")
+        self.g_auto_mode_settings = QGroupBox("Everything Mode Settings")
+        self.l_auto_mode_settings = QVBoxLayout()
+
+        l_points_per_side = QLabel("Points per side:")
+        self.l_auto_mode_settings.addWidget(l_points_per_side)
+        validator = QIntValidator()
+        validator.setRange(0, 9999)
+        self.le_points_per_side = QLineEdit()
+        self.le_points_per_side.setText("32")
+        self.le_points_per_side.setValidator(validator)
+        self.l_auto_mode_settings.addWidget(self.le_points_per_side)
+
+        l_points_per_batch = QLabel("Points per batch:")
+        self.l_auto_mode_settings.addWidget(l_points_per_batch)
+        validator = QIntValidator()
+        validator.setRange(0, 9999)
+        self.le_points_per_batch = QLineEdit()
+        self.le_points_per_batch.setText("64")
+        self.le_points_per_batch.setValidator(validator)
+        self.l_auto_mode_settings.addWidget(self.le_points_per_batch)
+
+        l_pred_iou_thresh = QLabel("Prediction IoU threshold:")
+        self.l_auto_mode_settings.addWidget(l_pred_iou_thresh)
+        validator = QDoubleValidator()
+        validator.setRange(0.0, 1.0)
+        validator.setDecimals(5)
+        self.le_pred_iou_thresh = QLineEdit()
+        self.le_pred_iou_thresh.setText("0.88")
+        self.le_pred_iou_thresh.setValidator(validator)
+        self.l_auto_mode_settings.addWidget(self.le_pred_iou_thresh)
+
+        l_stability_score_thresh = QLabel("Stability score threshold:")
+        self.l_auto_mode_settings.addWidget(l_stability_score_thresh)
+        validator = QDoubleValidator()
+        validator.setRange(0.0, 1.0)
+        validator.setDecimals(5)
+        self.le_stability_score_thresh = QLineEdit()
+        self.le_stability_score_thresh.setText("0.95")
+        self.le_stability_score_thresh.setValidator(validator)
+        self.l_auto_mode_settings.addWidget(self.le_stability_score_thresh)
+
+        l_stability_score_offset = QLabel("Stability score offset:")
+        self.l_auto_mode_settings.addWidget(l_stability_score_offset)
+        validator = QDoubleValidator()
+        validator.setRange(0.0, 1.0)
+        validator.setDecimals(5)
+        self.le_stability_score_offset = QLineEdit()
+        self.le_stability_score_offset.setText("1.0")
+        self.le_stability_score_offset.setValidator(validator)
+        self.l_auto_mode_settings.addWidget(self.le_stability_score_offset)
+
+        l_box_nms_thresh = QLabel("Box NMS threshold:")
+        self.l_auto_mode_settings.addWidget(l_box_nms_thresh)
+        validator = QDoubleValidator()
+        validator.setRange(0.0, 1.0)
+        validator.setDecimals(5)
+        self.le_box_nms_thresh = QLineEdit()
+        self.le_box_nms_thresh.setText("0.7")
+        self.le_box_nms_thresh.setValidator(validator)
+        self.l_auto_mode_settings.addWidget(self.le_box_nms_thresh)
+
+        l_crop_n_layers = QLabel("Crop N layers")
+        self.l_auto_mode_settings.addWidget(l_crop_n_layers)
+        validator = QIntValidator()
+        validator.setRange(0, 9999)
+        self.le_crop_n_layers = QLineEdit()
+        self.le_crop_n_layers.setText("0")
+        self.le_crop_n_layers.setValidator(validator)
+        self.l_auto_mode_settings.addWidget(self.le_crop_n_layers)
+
+        l_crop_nms_thresh = QLabel("Crop NMS threshold:")
+        self.l_auto_mode_settings.addWidget(l_crop_nms_thresh)
+        validator = QDoubleValidator()
+        validator.setRange(0.0, 1.0)
+        validator.setDecimals(5)
+        self.le_crop_nms_thresh = QLineEdit()
+        self.le_crop_nms_thresh.setText("0.7")
+        self.le_crop_nms_thresh.setValidator(validator)
+        self.l_auto_mode_settings.addWidget(self.le_crop_nms_thresh)
+
+        l_crop_overlap_ratio = QLabel("Crop overlap ratio:")
+        self.l_auto_mode_settings.addWidget(l_crop_overlap_ratio)
+        validator = QDoubleValidator()
+        validator.setRange(0.0, 1.0)
+        validator.setDecimals(5)
+        self.le_crop_overlap_ratio = QLineEdit()
+        self.le_crop_overlap_ratio.setText("0.3413")
+        self.le_crop_overlap_ratio.setValidator(validator)
+        self.l_auto_mode_settings.addWidget(self.le_crop_overlap_ratio)
+
+        l_crop_n_points_downscale_factor = QLabel("Crop N points downscale factor")
+        self.l_auto_mode_settings.addWidget(l_crop_n_points_downscale_factor)
+        validator = QIntValidator()
+        validator.setRange(0, 9999)
+        self.le_crop_n_points_downscale_factor = QLineEdit()
+        self.le_crop_n_points_downscale_factor.setText("1")
+        self.le_crop_n_points_downscale_factor.setValidator(validator)
+        self.l_auto_mode_settings.addWidget(self.le_crop_n_points_downscale_factor)
+
+        l_min_mask_region_area = QLabel("Min mask region area")
+        self.l_auto_mode_settings.addWidget(l_min_mask_region_area)
+        validator = QIntValidator()
+        validator.setRange(0, 9999)
+        self.le_min_mask_region_area = QLineEdit()
+        self.le_min_mask_region_area.setText("0")
+        self.le_min_mask_region_area.setValidator(validator)
+        self.l_auto_mode_settings.addWidget(self.le_min_mask_region_area)
+
+        # self.g_auto_mode_settings.setContentLayout(self.l_auto_mode_settings)
+        self.g_auto_mode_settings.setLayout(self.l_auto_mode_settings)
+        # main_layout.addWidget(self.g_auto_mode_settings)
+        container_layout_auto.addWidget(self.g_auto_mode_settings)
+
+        scroll_area_auto = QScrollArea()
+        # scroll_area_info.setWidgetResizable(True)
+        scroll_area_auto.setWidget(container_widget_auto)
+        # Set the scrollbar policies for the scroll area
+        scroll_area_auto.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        # scroll_area_info.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        scroll_area_auto.hide()
+
+        self.main_layout.addWidget(scroll_area_auto)
 
     def _init_UI_signals(self):
         """ connecting signals for pure UI elements interactions """
