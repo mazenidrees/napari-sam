@@ -135,9 +135,9 @@ class UiElements:
         self._init_main_layout()
         self._init_UI_signals()
 
-        self.viewer.layers.events.inserted.connect(self.update_UI) # TODO make spacial cases instead of updating everything
-        self.viewer.layers.events.removed.connect(self.update_UI)
-        self.le_number_of_classes.textChanged.connect(self.update_UI)
+        self.viewer.layers.events.inserted.connect(self._update_UI) # TODO make spacial cases instead of updating everything
+        self.viewer.layers.events.removed.connect(self._update_UI)
+        self.le_number_of_classes.textChanged.connect(self._update_UI)
 
     ################################ UI elements ################################
 
@@ -149,6 +149,7 @@ class UiElements:
         self._init_annotation_mode()
         self._init_activation_button()
         self._init_label_layer_selection()
+        self._init_submit_to_class_button()
         self._init_tooltip()
         self.init_auto_mode_settings()
 
@@ -169,7 +170,7 @@ class UiElements:
         self.main_layout.addWidget(l_input_image)
 
         self.cb_input_image_selctor = QComboBox()
-        self.update_input_images()
+        self._update_input_images()
         self.main_layout.addWidget(self.cb_input_image_selctor)
     
     def _init_number_of_classes(self):
@@ -215,6 +216,13 @@ class UiElements:
 
     def _init_activation_button(self):
         self.btn_activate = QPushButton("Activate")
+        #self.btn_activate.clicked.connect(self._activate) #### TODO: Callback function is defined externally through a setter function below
+        self.btn_activate.setEnabled(False)
+        self.is_active = False
+        self.main_layout.addWidget(self.btn_activate)
+
+    def _init_submit_to_class_button(self):
+        self.btn_activate = QPushButton("submit to class")
         #self.btn_activate.clicked.connect(self._activate) #### TODO: Callback function is defined externally through a setter function below
         self.btn_activate.setEnabled(False)
         self.is_active = False
@@ -399,14 +407,14 @@ class UiElements:
         #self.rb_click.clicked.connect(self.on_everything_mode_checked) # TODO: change UI elements to reflect the mode
         #self.rb_auto.clicked.connect(self.on_everything_mode_checked)  # TODO: change UI elements to reflect the mode
 
-    def update_UI(self):
-        self.update_input_images()
+    def _update_UI(self):
+        self._update_input_images()
         self.ls_label_selector.update_layers()
         self._check_activate_btn()
 
     ################################ internal signals ################################
 
-    def update_input_images(self):
+    def _update_input_images(self):
         self.cb_input_image_selctor.clear()
 
         for layer in self.viewer.layers:
