@@ -112,7 +112,7 @@ class UiElements:
 
         self.cb_model_selctor = None
         self.btn_load_model = None
-        self.ls_image_selector = None
+        self.cb_input_image_selctor = None
         self.rb_click_mode = None
         self.rb_auto_mode = None
         self.ls_label_selector = None
@@ -120,15 +120,15 @@ class UiElements:
 
         self.le_points_per_side = None
         self.le_points_per_batch = None
-        self.le_pred_iou_thresh = None
-        self.le_stability_score_thresh = None
+        self.le_prediction_iou_threshold = None
+        self.le_stability_score_threshold = None
         self.le_stability_score_offset = None
-        self.le_box_nms_thresh = None
+        self.le_box_nms_threshold = None
         self.le_crop_n_layers = None
-        self.le_crop_nms_thresh = None
+        self.le_crop_nms_threshold = None
         self.le_crop_overlap_ratio = None
         self.le_crop_n_points_downscale_factor = None
-        self.le_min_mask_region_area = None
+        self.le_minimum_mask_region_area = None
         
 
         self._init_main_layout()
@@ -136,7 +136,7 @@ class UiElements:
 
         self.viewer.layers.events.inserted.connect(self.update_UI) # TODO make spacial cases instead of updating everything
         self.viewer.layers.events.removed.connect(self.update_UI)
-        self.ls_image_selector.itemSelectionChanged.connect(self.update_UI)
+
 
     
 
@@ -165,12 +165,12 @@ class UiElements:
         self._update_model_selection_combobox_and_button()
 
     def _init_image_selection(self):
-        l_image_layer = QLabel("Select input image:")
-        self.main_layout.addWidget(l_image_layer)
-        
-        self.ls_image_selector = LayerSelector(self.viewer, napari.layers.Image) #### TODO: Callback function is defined externally through a setter function below
-        self.ls_image_selector.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
-        self.main_layout.addWidget(self.ls_image_selector)
+        l_input_image = QLabel("Select input image:")
+        self.main_layout.addWidget(l_input_image)
+
+        self.cb_input_image_selctor = QComboBox() #### Callback function is defined below
+        self.update_input_images()
+        self.main_layout.addWidget(self.cb_input_image_selctor)
 
     def _init_annotation_mode(self):
         self.g_annotation = QGroupBox("Annotation mode")
@@ -287,20 +287,20 @@ class UiElements:
         validator = QDoubleValidator()
         validator.setRange(0.0, 1.0)
         validator.setDecimals(5)
-        self.le_pred_iou_thresh = QLineEdit()
-        self.le_pred_iou_thresh.setText("0.88")
-        self.le_pred_iou_thresh.setValidator(validator)
-        self.l_auto_mode_settings.addWidget(self.le_pred_iou_thresh)
+        self.le_prediction_iou_threshold = QLineEdit()
+        self.le_prediction_iou_threshold.setText("0.88")
+        self.le_prediction_iou_threshold.setValidator(validator)
+        self.l_auto_mode_settings.addWidget(self.le_prediction_iou_threshold)
 
         l_stability_score_thresh = QLabel("Stability score threshold:")
         self.l_auto_mode_settings.addWidget(l_stability_score_thresh)
         validator = QDoubleValidator()
         validator.setRange(0.0, 1.0)
         validator.setDecimals(5)
-        self.le_stability_score_thresh = QLineEdit()
-        self.le_stability_score_thresh.setText("0.95")
-        self.le_stability_score_thresh.setValidator(validator)
-        self.l_auto_mode_settings.addWidget(self.le_stability_score_thresh)
+        self.le_stability_score_threshold = QLineEdit()
+        self.le_stability_score_threshold.setText("0.95")
+        self.le_stability_score_threshold.setValidator(validator)
+        self.l_auto_mode_settings.addWidget(self.le_stability_score_threshold)
 
         l_stability_score_offset = QLabel("Stability score offset:")
         self.l_auto_mode_settings.addWidget(l_stability_score_offset)
@@ -317,10 +317,10 @@ class UiElements:
         validator = QDoubleValidator()
         validator.setRange(0.0, 1.0)
         validator.setDecimals(5)
-        self.le_box_nms_thresh = QLineEdit()
-        self.le_box_nms_thresh.setText("0.7")
-        self.le_box_nms_thresh.setValidator(validator)
-        self.l_auto_mode_settings.addWidget(self.le_box_nms_thresh)
+        self.le_box_nms_threshold = QLineEdit()
+        self.le_box_nms_threshold.setText("0.7")
+        self.le_box_nms_threshold.setValidator(validator)
+        self.l_auto_mode_settings.addWidget(self.le_box_nms_threshold)
 
         l_crop_n_layers = QLabel("Crop N layers")
         self.l_auto_mode_settings.addWidget(l_crop_n_layers)
@@ -336,10 +336,10 @@ class UiElements:
         validator = QDoubleValidator()
         validator.setRange(0.0, 1.0)
         validator.setDecimals(5)
-        self.le_crop_nms_thresh = QLineEdit()
-        self.le_crop_nms_thresh.setText("0.7")
-        self.le_crop_nms_thresh.setValidator(validator)
-        self.l_auto_mode_settings.addWidget(self.le_crop_nms_thresh)
+        self.le_crop_nms_threshold = QLineEdit()
+        self.le_crop_nms_threshold.setText("0.7")
+        self.le_crop_nms_threshold.setValidator(validator)
+        self.l_auto_mode_settings.addWidget(self.le_crop_nms_threshold)
 
         l_crop_overlap_ratio = QLabel("Crop overlap ratio:")
         self.l_auto_mode_settings.addWidget(l_crop_overlap_ratio)
@@ -364,10 +364,10 @@ class UiElements:
         self.l_auto_mode_settings.addWidget(l_min_mask_region_area)
         validator = QIntValidator()
         validator.setRange(0, 9999)
-        self.le_min_mask_region_area = QLineEdit()
-        self.le_min_mask_region_area.setText("0")
-        self.le_min_mask_region_area.setValidator(validator)
-        self.l_auto_mode_settings.addWidget(self.le_min_mask_region_area)
+        self.le_minimum_mask_region_area = QLineEdit()
+        self.le_minimum_mask_region_area.setText("0")
+        self.le_minimum_mask_region_area.setValidator(validator)
+        self.l_auto_mode_settings.addWidget(self.le_minimum_mask_region_area)
 
         # self.g_auto_mode_settings.setContentLayout(self.l_auto_mode_settings)
         self.g_auto_mode_settings.setLayout(self.l_auto_mode_settings)
@@ -393,11 +393,17 @@ class UiElements:
         #self.rb_auto.clicked.connect(self.on_everything_mode_checked)  # TODO: change UI elements to reflect the mode
 
     def update_UI(self):
-        self.ls_image_selector.update_layers()
+        self.update_input_images()
         self.ls_label_selector.update_layers()
         self._check_activate_btn()
 
     ################################ internal signals ################################
+    def update_input_images(self):
+        self.cb_input_image_selctor.clear()
+
+        for layer in self.viewer.layers:
+            if isinstance(layer, napari.layers.Image):
+                self.cb_input_image_selctor.addItem(layer.name)
 
     def _update_model_selection_combobox_and_button(self):
         """Updates the model selection combobox and load model button based on the cached models."""
@@ -427,13 +433,12 @@ class UiElements:
     def _internal_handler_btn_load_model(self):
         self.cb_model_selctor.setEnabled(False)
         self.btn_load_model.setEnabled(False)
-        print("debug 1")
+
         model_types = list(SAM_MODELS.keys())
         model_type = model_types[self.cb_model_selctor.currentIndex()]
-        print("debug 2")
+
         self.external_handler_btn_load_model(model_type)
 
-        print("debug 3")
         self.loaded_model = model_type
         self._update_model_selection_combobox_and_button()
         self.cb_model_selctor.setEnabled(True)
@@ -441,9 +446,9 @@ class UiElements:
         self._check_activate_btn()
 
     def _check_activate_btn(self):
-        print(self.ls_image_selector.currentItem())
+        print(self.cb_input_image_selctor.currentText())
         print(self.loaded_model)
-        if self.ls_image_selector.currentItem() != None and self.loaded_model is not None: # TODO: add condition for number of classes
+        if self.cb_input_image_selctor.currentText() != "" and self.loaded_model is not None: # TODO: add condition for number of classes
             self.btn_activate.setEnabled(True)
         else:
             self.btn_activate.setEnabled(False)
@@ -455,7 +460,6 @@ class UiElements:
 
     def set_external_handler_btn_activate(self, handler):
         self.external_handler_btn_activate = handler
-
 
     def create_progress_bar(self, max_value, text):
         self.l_creating_features = QLabel(text)
