@@ -136,9 +136,36 @@ class SamWidget(QWidget):
         req.close()
 
 
+    def _activate(self):
+        self.btn_activate.setEnabled(False)
 
+        if not self.is_active:
+            self.set_layers()
+            self.adjust_image_layer_shape()
+            self.check_image_dimension()
+            self.set_sam_logits()
+            self.set_annotator_mode()
+            self.check_segmentation_mode()
 
+            if self.annotator_mode != AnnotatorMode.AUTO:
+                self.activate_annotator_mode_non_auto()
+                self.create_label_color_mapping()
+                self.reset_history()
+                self.connect_events()
 
+            elif self.annotator_mode == AnnotatorMode.AUTO:
+                self.activate_annotator_mode_auto()
+
+        else:
+            self._deactivate()
+            
+        self.btn_activate.setEnabled(True)
+
+    def set_layers(self):
+        self.image_name = self.cb_image_layers.currentText()
+        self.image_layer = self.viewer.layers[self.cb_image_layers.currentText()]
+        self.label_layer = self.viewer.layers[self.cb_label_layers.currentText()]
+        self.label_layer_changes = None
 
 
 
