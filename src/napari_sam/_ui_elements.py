@@ -65,8 +65,6 @@ class LayerSelector(QListWidget):
         super().__init__()
         self.viewer = viewer
         self.layer_type = layer_type  # Save layer type
-        self.viewer.layers.events.inserted.connect(self.update_layers)
-        self.viewer.layers.events.removed.connect(self.update_layers)
         self.update_layers()  # Update layers at startup
 
         # connect a method to the itemSelectionChanged signal
@@ -112,7 +110,7 @@ class UiElements:
         self.cached_models = None
         self.loaded_model = None
 
-        self.cb_model_type = None
+        self.cb_model_selctor = None
         self.btn_load_model = None
         self.ls_image_selector = None
         self.rb_click_mode = None
@@ -136,7 +134,14 @@ class UiElements:
         self._init_main_layout()
         self._init_UI_signals()
 
-    ######## UI elements ########
+        self.viewer.layers.events.inserted.connect(self.update_UI) # TODO make spacial cases instead of updating everything
+        self.viewer.layers.events.removed.connect(self.update_UI)
+        self.ls_image_selector.itemSelectionChanged.connect(self.update_UI)
+
+    
+
+    ################################ UI elements ################################
+
     def _init_main_layout(self):
         self.main_layout = QVBoxLayout()
         self._init_model_selection()
@@ -151,8 +156,8 @@ class UiElements:
         l_model_type = QLabel("Select model type:")
         self.main_layout.addWidget(l_model_type)
 
-        self.cb_model_type = QComboBox() #### Callback function is defined below
-        self.main_layout.addWidget(self.cb_model_type)
+        self.cb_model_selctor = QComboBox() #### Callback function is defined below
+        self.main_layout.addWidget(self.cb_model_selctor)
         
         self.btn_load_model = QPushButton("Load model") #### TODO: Callback function is defined externally through a setter function below
         self.main_layout.addWidget(self.btn_load_model)
@@ -378,49 +383,98 @@ class UiElements:
         scroll_area_auto.hide()
 
         self.main_layout.addWidget(scroll_area_auto)
-
+   
     def _init_UI_signals(self):
         """ connecting signals for pure UI elements interactions """
-        self.cb_model_type.currentTextChanged.connect(self._update_model_selection_combobox_and_button)
+        self.cb_model_selctor.currentTextChanged.connect(self._update_model_selection_combobox_and_button)
+        self.btn_load_model.clicked.connect(self._internal_handler_btn_load_model) 
+
         #self.rb_click.clicked.connect(self.on_everything_mode_checked) # TODO: change UI elements to reflect the mode
         #self.rb_auto.clicked.connect(self.on_everything_mode_checked)  # TODO: change UI elements to reflect the mode
-    ######## UI elements ######## END
 
-    def _set_model_load_handler(self, handler: callable) -> None:
-        """
-        Sets the callback function for the load model button.
-        function signature: partial(handler, args)
-        """
-        self.btn_load_model.clicked.connect(handler)
+    def update_UI(self):
+        self.ls_image_selector.update_layers()
+        self.ls_label_selector.update_layers()
+        self._check_activate_btn()
+
+    ################################ internal signals ################################
 
     def _update_model_selection_combobox_and_button(self):
-        """Updates the model selection combobox and button based on the cached models."""
+        """Updates the model selection combobox and load model button based on the cached models."""
 
         # Disconnect the signal if it's connected to avoid triggering the signal when clearing the combobox
-        if self.cb_model_type.receivers(self.cb_model_type.currentTextChanged) > 0: 
-            self.cb_model_type.currentTextChanged.disconnect()
+        if self.cb_model_selctor.receivers(self.cb_model_selctor.currentTextChanged) > 0: 
+            self.cb_model_selctor.currentTextChanged.disconnect()
 
         self.cached_models, combobox_models = get_cached_models(SAM_MODELS, self.loaded_model)
 
-        # Store current selection
-        current_selection = self.cb_model_type.currentText()
+        current_selection_index = self.cb_model_selctor.currentIndex()
 
-        # Check if the combobox needs to be updated
-        if set(combobox_models) != set([self.cb_model_type.itemText(i) for i in range(self.cb_model_type.count())]):
-            self.cb_model_type.clear()
-            self.cb_model_type.addItems(combobox_models)
+        self.cb_model_selctor.clear()
+        self.cb_model_selctor.addItems(combobox_models)
 
         # Reselect the previously selected item
-        index = self.cb_model_type.findText(current_selection)
-        self.cb_model_type.setCurrentIndex(index)
+        self.cb_model_selctor.setCurrentIndex(current_selection_index)
 
-        if self.cached_models[list(self.cached_models.keys())[self.cb_model_type.currentIndex()]]:
+        if self.cached_models[list(self.cached_models.keys())[self.cb_model_selctor.currentIndex()]]:
             self.btn_load_model.setText("Load model")
         else:
             self.btn_load_model.setText("Download and load model")
 
         # Reconnect the signal
-        self.cb_model_type.currentTextChanged.connect(self._update_model_selection_combobox_and_button)
+        self.cb_model_selctor.currentTextChanged.connect(self._update_model_selection_combobox_and_button)
+
+    def _internal_handler_btn_load_model(self):
+        self.cb_model_selctor.setEnabled(False)
+        self.btn_load_model.setEnabled(False)
+        print("debug 1")
+        model_types = list(SAM_MODELS.keys())
+        model_type = model_types[self.cb_model_selctor.currentIndex()]
+        print("debug 2")
+        self.external_handler_btn_load_model(model_type)
+
+        print("debug 3")
+        self.loaded_model = model_type
+        self._update_model_selection_combobox_and_button()
+        self.cb_model_selctor.setEnabled(True)
+        self.btn_load_model.setEnabled(True)
+        self._check_activate_btn()
+
+    def _check_activate_btn(self):
+        print(self.ls_image_selector.currentItem())
+        print(self.loaded_model)
+        if self.ls_image_selector.currentItem() != None and self.loaded_model is not None: # TODO: add condition for number of classes
+            self.btn_activate.setEnabled(True)
+        else:
+            self.btn_activate.setEnabled(False)
+
+    ################################ set external signals ################################
+
+    def set_external_handler_btn_load_model(self, handler):
+        self.external_handler_btn_load_model = handler
+
+    def set_external_handler_btn_activate(self, handler):
+        self.external_handler_btn_activate = handler
+
+
+    def create_progress_bar(self, max_value, text):
+        self.l_creating_features = QLabel(text)
+        self.main_layout.addWidget(self.l_creating_features)
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setMaximum(max_value)
+        self.progress_bar.setValue(0)
+        self.main_layout.addWidget(self.progress_bar)
+
+    def update_progress_bar(self, value):
+        self.progress_bar.setValue(value)
+        QApplication.processEvents()
+
+    def delete_progress_bar(self):
+        self.progress_bar.deleteLater()
+        self.l_creating_features.deleteLater()
+
+
+
 
 
 def get_cached_models(SAM_MODELS: dict, loaded_model: str) -> tuple:
@@ -446,5 +500,4 @@ def get_cached_models(SAM_MODELS: dict, loaded_model: str) -> tuple:
         else:
             entries.append(f"{name} (Auto-Download)")
     return cached_models, entries
-
 

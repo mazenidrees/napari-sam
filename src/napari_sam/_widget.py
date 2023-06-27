@@ -73,3 +73,74 @@ class SamWidget(QWidget):
         self.viewer = napari_viewer
         self.ui_elements = UiElements(self.viewer)
         self.setLayout(self.ui_elements.main_layout)
+
+        #### setting up ui callbacks ####
+        self.ui_elements.set_external_handler_btn_load_model(self.load_model)
+
+    def load_model(self, model_type):
+        if not torch.cuda.is_available():
+            if not torch.backends.mps.is_available():
+                self.device = "cpu"
+            else:
+                self.device = "mps"
+        else:
+            self.device = "cuda"
+        sam_model = SAM_MODELS[model_type]["model"](self.get_weights_path(model_type))
+
+        sam_model.to(self.device)
+        print("debug 4")
+        sam_predictor = SamPredictor(sam_model)
+        print("debug 5")
+
+    def get_weights_path(self, model_type):
+        weight_url = SAM_MODELS[model_type]["url"]
+
+        cache_dir = Path.home() / ".cache/napari-segment-anything"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
+        weight_path = cache_dir / SAM_MODELS[model_type]["filename"]
+
+        if not weight_path.exists():
+            print("Downloading {} to {} ...".format(weight_url, weight_path))
+            self.download_with_progress(weight_url, weight_path)
+
+        return weight_path
+
+    def download_with_progress(self, url, output_file):
+        # Open the URL and get the content length
+        req = urllib.request.urlopen(url)
+        content_length = int(req.headers.get('Content-Length'))
+
+        self.ui_elements.create_progress_bar(int(content_length / 1024), "Downloading model:")
+
+        # Set up the tqdm progress bar
+        progress_bar_tqdm = tqdm(total=content_length, unit='B', unit_scale=True, desc="Downloading model")
+
+        # Download the file and update the progress bar
+        with open(output_file, 'wb') as f:
+            downloaded_bytes = 0
+            while True:
+                buffer = req.read(8192)
+                if not buffer:
+                    break
+                downloaded_bytes += len(buffer)
+                f.write(buffer)
+                progress_bar_tqdm.update(len(buffer))
+
+                # Update the progress bar using UiElements method
+                self.ui_elements.update_progress_bar(int(downloaded_bytes / 1024))
+
+        self.ui_elements.delete_progress_bar()
+
+        progress_bar_tqdm.close()
+        req.close()
+
+
+
+
+
+
+
+
+
+
