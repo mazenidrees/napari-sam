@@ -113,6 +113,7 @@ class UiElements:
         self.cb_model_selctor = None
         self.btn_load_model = None
         self.cb_input_image_selctor = None
+        self.le_number_of_classes = None
         self.rb_click_mode = None
         self.rb_auto_mode = None
         self.ls_label_selector = None
@@ -136,16 +137,15 @@ class UiElements:
 
         self.viewer.layers.events.inserted.connect(self.update_UI) # TODO make spacial cases instead of updating everything
         self.viewer.layers.events.removed.connect(self.update_UI)
-
-
-    
+        self.le_number_of_classes.textChanged.connect(self.update_UI)
 
     ################################ UI elements ################################
 
     def _init_main_layout(self):
         self.main_layout = QVBoxLayout()
         self._init_model_selection()
-        self._init_image_selection()
+        self._init_input_image_selection()
+        self._init_number_of_classes()
         self._init_annotation_mode()
         self._init_activation_button()
         self._init_label_layer_selection()
@@ -156,21 +156,28 @@ class UiElements:
         l_model_type = QLabel("Select model type:")
         self.main_layout.addWidget(l_model_type)
 
-        self.cb_model_selctor = QComboBox() #### Callback function is defined below
+        self.cb_model_selctor = QComboBox()
         self.main_layout.addWidget(self.cb_model_selctor)
         
-        self.btn_load_model = QPushButton("Load model") #### TODO: Callback function is defined externally through a setter function below
+        self.btn_load_model = QPushButton("Load model") #### Callback function is defined externally through a setter function below
         self.main_layout.addWidget(self.btn_load_model)
 
         self._update_model_selection_combobox_and_button()
 
-    def _init_image_selection(self):
+    def _init_input_image_selection(self):
         l_input_image = QLabel("Select input image:")
         self.main_layout.addWidget(l_input_image)
 
-        self.cb_input_image_selctor = QComboBox() #### Callback function is defined below
+        self.cb_input_image_selctor = QComboBox()
         self.update_input_images()
         self.main_layout.addWidget(self.cb_input_image_selctor)
+    
+    def _init_number_of_classes(self):
+        self.l_number_of_classes = QLabel("Enter number of classes:")
+        self.main_layout.addWidget(self.l_number_of_classes)
+        
+        self.le_number_of_classes = QLineEdit()
+        self.main_layout.addWidget(self.le_number_of_classes)
 
     def _init_annotation_mode(self):
         self.g_annotation = QGroupBox("Annotation mode")
@@ -398,6 +405,7 @@ class UiElements:
         self._check_activate_btn()
 
     ################################ internal signals ################################
+
     def update_input_images(self):
         self.cb_input_image_selctor.clear()
 
@@ -446,9 +454,7 @@ class UiElements:
         self._check_activate_btn()
 
     def _check_activate_btn(self):
-        print(self.cb_input_image_selctor.currentText())
-        print(self.loaded_model)
-        if self.cb_input_image_selctor.currentText() != "" and self.loaded_model is not None: # TODO: add condition for number of classes
+        if self.cb_input_image_selctor.currentText() != "" and self.loaded_model is not None and is_number(self.le_number_of_classes.text()) :
             self.btn_activate.setEnabled(True)
         else:
             self.btn_activate.setEnabled(False)
@@ -460,6 +466,8 @@ class UiElements:
 
     def set_external_handler_btn_activate(self, handler):
         self.external_handler_btn_activate = handler
+
+    ################################ externally activated UI elements ################################
 
     def create_progress_bar(self, max_value, text):
         self.l_creating_features = QLabel(text)
@@ -477,9 +485,7 @@ class UiElements:
         self.progress_bar.deleteLater()
         self.l_creating_features.deleteLater()
 
-
-
-
+    ################################ utilities ################################
 
 def get_cached_models(SAM_MODELS: dict, loaded_model: str) -> tuple:
     """Check if the weights of the SAM models are cached locally."""
@@ -505,3 +511,9 @@ def get_cached_models(SAM_MODELS: dict, loaded_model: str) -> tuple:
             entries.append(f"{name} (Auto-Download)")
     return cached_models, entries
 
+def is_number(input_string: str):
+    try:
+        float(input_string)
+        return True
+    except ValueError:
+        return False
