@@ -118,6 +118,7 @@ class UiElements:
         self.rb_auto_mode = None
         self.ls_label_selector = None
         self.btn_activate = None
+        self.btn_submit_to_class = None
 
         self.le_points_per_side = None
         self.le_points_per_batch = None
@@ -145,6 +146,7 @@ class UiElements:
         self.main_layout = QVBoxLayout()
         self._init_model_selection()
         self._init_input_image_selection()
+        self._init_output_label_selection()
         self._init_number_of_classes()
         self._init_annotation_mode()
         self._init_activation_button()
@@ -170,9 +172,17 @@ class UiElements:
         self.main_layout.addWidget(l_input_image)
 
         self.cb_input_image_selctor = QComboBox()
-        self._update_input_images()
+        self._update_layer_selection_combobox(self.cb_input_image_selctor, napari.layers.Image)
         self.main_layout.addWidget(self.cb_input_image_selctor)
     
+    def _init_output_label_selection(self):
+        l_output_label = QLabel("Select output label:")
+        self.main_layout.addWidget(l_output_label)
+
+        self.cb_output_label_selctor = QComboBox()
+        self._update_layer_selection_combobox(self.cb_output_label_selctor, napari.layers.Labels)
+        self.main_layout.addWidget(self.cb_output_label_selctor)
+
     def _init_number_of_classes(self):
         self.l_number_of_classes = QLabel("Enter number of classes:")
         self.main_layout.addWidget(self.l_number_of_classes)
@@ -222,11 +232,11 @@ class UiElements:
         self.main_layout.addWidget(self.btn_activate)
 
     def _init_submit_to_class_button(self):
-        self.btn_activate = QPushButton("submit to class")
+        self.btn_submit_to_class = QPushButton("submit to class")
         #self.btn_activate.clicked.connect(self._activate) #### TODO: Callback function is defined externally through a setter function below
-        self.btn_activate.setEnabled(False)
+        self.btn_submit_to_class.setEnabled(False)
         self.is_active = False
-        self.main_layout.addWidget(self.btn_activate)
+        self.main_layout.addWidget(self.btn_submit_to_class)
 
     def _init_tooltip(self):
         container_widget_info = QWidget()
@@ -408,18 +418,20 @@ class UiElements:
         #self.rb_auto.clicked.connect(self.on_everything_mode_checked)  # TODO: change UI elements to reflect the mode
 
     def _update_UI(self):
-        self._update_input_images()
+        self._update_layer_selection_combobox(self.cb_input_image_selctor, napari.layers.Image)
+        self._update_layer_selection_combobox(self.cb_output_label_selctor, napari.layers.Labels)
         self.ls_label_selector.update_layers()
         self._check_activate_btn()
+        self._update_submit_to_class_btn()
 
     ################################ internal signals ################################
 
-    def _update_input_images(self):
-        self.cb_input_image_selctor.clear()
+    def _update_layer_selection_combobox(self, layer_selection_combobox, layers_type):
+        layer_selection_combobox.clear()
 
         for layer in self.viewer.layers:
-            if isinstance(layer, napari.layers.Image):
-                self.cb_input_image_selctor.addItem(layer.name)
+            if isinstance(layer, layers_type):
+                layer_selection_combobox.addItem(layer.name)
 
     def _update_model_selection_combobox_and_button(self):
         """Updates the model selection combobox and load model button based on the cached models."""
@@ -462,11 +474,21 @@ class UiElements:
         self._check_activate_btn()
 
     def _check_activate_btn(self):
-        if self.cb_input_image_selctor.currentText() != "" and self.loaded_model is not None and is_number(self.le_number_of_classes.text()) :
+        if (
+            self.loaded_model is not None and
+            self.cb_input_image_selctor.currentText() != "" and
+            self.cb_output_label_selctor.currentText() != "" and
+            is_number(self.le_number_of_classes.text())
+        ):
             self.btn_activate.setEnabled(True)
         else:
             self.btn_activate.setEnabled(False)
 
+    def _update_submit_to_class_btn(self):
+        if self.is_active:
+            self.btn_submit_to_class.setEnabled(True)
+        else:
+            self.btn_submit_to_class.setEnabled(False)
     ################################ set external signals ################################
 
     def set_external_handler_btn_load_model(self, handler):
