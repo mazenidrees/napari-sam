@@ -43,7 +43,6 @@ from segment_anything import (
 )
 from segment_anything.automatic_mask_generator import SamAutomaticMaskGenerator
 
-
 class AnnotatorMode(Enum):
     NONE = 0
     CLICK = 1
@@ -135,39 +134,137 @@ class SamWidget(QWidget):
         progress_bar_tqdm.close()
         req.close()
 
+""" 
+    def activate(self, annotator_mode):
+        self.set_layers()
+        self.adjust_image_layer_shape()
+        self.check_image_dimension()
+        self.set_sam_logits()
 
-    def _activate(self):
-        self.btn_activate.setEnabled(False)
+        if annotator_mode != AnnotatorMode.AUTO:
+            self.activate_annotation_mode_click()
 
-        if not self.is_active:
-            self.set_layers()
-            self.adjust_image_layer_shape()
-            self.check_image_dimension()
-            self.set_sam_logits()
-            self.set_annotator_mode()
-            self.check_segmentation_mode()
+        elif annotator_mode == AnnotatorMode.AUTO:
+            self.activate_annotator_mode_auto()
 
-            if self.annotator_mode != AnnotatorMode.AUTO:
-                self.activate_annotator_mode_non_auto()
-                self.create_label_color_mapping()
-                self.reset_history()
-                self.connect_events()
-
-            elif self.annotator_mode == AnnotatorMode.AUTO:
-                self.activate_annotator_mode_auto()
-
-        else:
-            self._deactivate()
-            
-        self.btn_activate.setEnabled(True)
-
+    # good
     def set_layers(self):
-        self.image_name = self.cb_image_layers.currentText()
-        self.image_layer = self.viewer.layers[self.cb_image_layers.currentText()]
-        self.label_layer = self.viewer.layers[self.cb_label_layers.currentText()]
+        self.image_name = self.ui_elements.cb_input_image_selctor.currentText()
+        self.image_layer = self.viewer.layers[self.ui_elements.cb_input_image_selctor.currentText()]
+        self.label_layer = self.viewer.layers[self.ui_elements.cb_output_label_selctor.currentText()]
         self.label_layer_changes = None
+    # good
+    def adjust_image_layer_shape(self):
+        if self.image_layer.ndim == 3:
+            # Fixes shape adjustment by napari
+            self.image_layer_affine_scale = self.image_layer.affine.scale
+            self.image_layer_scale = self.image_layer.scale
+            self.image_layer_scale_factor = self.image_layer.scale_factor
+            self.label_layer_affine_scale = self.label_layer.affine.scale
+            self.label_layer_scale = self.label_layer.scale
+            self.label_layer_scale_factor = self.label_layer.scale_factor
+            self.image_layer.affine.scale = np.array([1, 1, 1])
+            self.image_layer.scale = np.array([1, 1, 1])
+            self.image_layer.scale_factor = 1
+            self.label_layer.affine.scale = np.array([1, 1, 1])
+            self.label_layer.scale = np.array([1, 1, 1])
+            self.label_layer.scale_factor = 1
+            pos = self.viewer.dims.point
+            self.viewer.dims.set_point(0, 0)
+            self.viewer.dims.set_point(0, pos[0])
+            self.viewer.reset_view()
+    # good
+    def check_image_dimension(self):
+        if self.image_layer.ndim != 2 and self.image_layer.ndim != 3:
+            raise RuntimeError("Only 2D and 3D images are supported.")
+    # good
+    def set_sam_logits(self):
+        if self.image_layer.ndim == 2:
+            self.sam_logits = None
+        else:
+            self.sam_logits = [None] * self.image_layer.data.shape[0]
+    # good
 
+    def activate_annotation_mode_click(self):
+            selected_layer = None
+            if self.viewer.layers.selection.active != self.points_layer:
+                selected_layer = self.viewer.layers.selection.active
 
+            if selected_layer is not None:
+                self.viewer.layers.selection.active = selected_layer
 
+            if self.image_layer.ndim == 2:
+                self.point_size = int(np.min(self.image_layer.data.shape[:2]) / 100)
+                if self.point_size == 0:
+                    self.point_size = 1
+            else:
+                self.point_size = 2
 
+            self.create_label_color_mapping()
 
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=FutureWarning)
+                self._history_limit = self.label_layer._history_limit
+            self._reset_history()
+
+            self.image_layer.events.contrast_limits.connect(qdebounced(self.on_contrast_limits_change, timeout=1000))
+
+            self.set_image()
+            self.update_points_layer(None)
+
+            self.viewer.mouse_drag_callbacks.append(self.callback_click)
+            self.viewer.keymap['Delete'] = self.on_delete
+            self.label_layer.keymap['Control-Z'] = self.on_undo
+            self.label_layer.keymap['Control-Shift-Z'] = self.on_redo
+
+    def activate_annotator_mode_auto(self):
+        self.sam_anything_predictor = SamAutomaticMaskGenerator(self.sam_model,
+                                                                points_per_side=int(self.le_points_per_side.text()),
+                                                                points_per_batch=int(self.le_points_per_batch.text()),
+                                                                pred_iou_thresh=float(self.le_pred_iou_thresh.text()),
+                                                                stability_score_thresh=float(self.le_stability_score_thresh.text()),
+                                                                stability_score_offset=float(self.le_stability_score_offset.text()),
+                                                                box_nms_thresh=float(self.le_box_nms_thresh.text()),
+                                                                crop_n_layers=int(self.le_crop_n_layers.text()),
+                                                                crop_nms_thresh=float(self.le_crop_nms_thresh.text()),
+                                                                crop_overlap_ratio=float(self.le_crop_overlap_ratio.text()),
+                                                                crop_n_points_downscale_factor=int(self.le_crop_n_points_downscale_factor.text()),
+                                                                min_mask_region_area=int(self.le_min_mask_region_area.text()),
+                                                                )
+        prediction = self.predict_everything()
+        self.label_layer.data = prediction
+
+    def create_label_color_mapping(self):
+        if self.label_layer is not None:
+            self.label_color_mapping = {"label_mapping": {}, "color_mapping": {}}
+            for label in range(num_labels):
+                color = self.label_layer.get_color(label)
+                self.label_color_mapping["label_mapping"][label] = color
+                self.label_color_mapping["color_mapping"][str(color)] = label
+
+    def set_image(self):
+        contrast_limits = self.image_layer.contrast_limits
+        if self.image_layer.ndim == 2:
+            image = np.asarray(self.image_layer.data)
+            self.sam_features = self.process_image(image, contrast_limits)
+        
+        elif self.image_layer.ndim == 3:
+            total_slices = self.image_layer.data.shape[0]
+            self.ui_elements.create_progress_bar(total_slices, "Creating SAM image embedding:")
+
+            self.sam_features = []
+            for index in range(total_slices):
+                image_slice = np.asarray(self.image_layer.data[index, ...])
+                self.sam_features.append(self.process_image(image_slice, contrast_limits))
+                self.ui_elements.update_progress_bar(index+1)
+
+            self.ui_elements.delete_progress_bar()
+        
+    def process_image(self, image_slice, contrast_limits):
+        if not self.image_layer.rgb:
+            image_slice = np.stack((image_slice,) * 3, axis=-1)  # Expand to 3-channel image
+        image_slice = image_slice[..., :3]  # Remove a potential alpha channel
+        image_slice = normalize(image_slice, source_limits=contrast_limits, target_limits=(0, 255)).astype(np.uint8)
+        self.sam_predictor.set_image(image_slice)
+        return self.sam_predictor.features
+ """
