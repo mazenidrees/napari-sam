@@ -115,7 +115,7 @@ class UiElements:
         self.cb_input_image_selctor = None
         self.le_number_of_classes = None
         self.rb_click_mode = None
-        self.rb_auto_mode = None
+        self.rb_annotation_mode_automatic = None
         self.ls_label_selector = None
         self.btn_activate = None
         self.btn_submit_to_class = None
@@ -194,24 +194,24 @@ class UiElements:
         self.g_annotation = QGroupBox("Annotation mode")
         self.l_annotation = QVBoxLayout()
 
-        self.rb_click = QRadioButton("Click && Bounding Box")
-        self.rb_click.setChecked(True)
-        self.rb_click.setToolTip(
+        self.rb_annotation_mode_click = QRadioButton("Click && Bounding Box")
+        self.rb_annotation_mode_click.setChecked(True)
+        self.rb_annotation_mode_click.setToolTip(
             "Positive Click: Middle Mouse Button\n \n"
             "Negative Click: Control + Middle Mouse Button \n \n"
             "Undo: Control + Z \n \n"
             "Select Point: Left Click \n \n"
             "Delete Selected Point: Delete"
         )
-        self.l_annotation.addWidget(self.rb_click)
+        self.l_annotation.addWidget(self.rb_annotation_mode_click)
 
-        self.rb_auto_mode = QRadioButton("Automatic mask generation")
-        self.rb_auto_mode.setToolTip(
+        self.rb_annotation_mode_automatic = QRadioButton("Automatic mask generation")
+        self.rb_annotation_mode_automatic.setToolTip(
             "Creates automatically an instance segmentation \n"
             "of the entire image.\n"
             "No user interaction possible."
         )
-        self.l_annotation.addWidget(self.rb_auto_mode)
+        self.l_annotation.addWidget(self.rb_annotation_mode_automatic)
 
         self.g_annotation.setLayout(self.l_annotation)
         self.main_layout.addWidget(self.g_annotation)
@@ -413,6 +413,7 @@ class UiElements:
         """ connecting signals for pure UI elements interactions """
         self.cb_model_selctor.currentTextChanged.connect(self._update_model_selection_combobox_and_button)
         self.btn_load_model.clicked.connect(self._internal_handler_btn_load_model) 
+        self.btn_activate.clicked.connect(self._internal_handler_btn_activate)
 
         #self.rb_click.clicked.connect(self.on_everything_mode_checked) # TODO: change UI elements to reflect the mode
         #self.rb_auto.clicked.connect(self.on_everything_mode_checked)  # TODO: change UI elements to reflect the mode
@@ -473,6 +474,50 @@ class UiElements:
         self.btn_load_model.setEnabled(True)
         self._check_activate_btn()
 
+    def _internal_handler_btn_activate(self):
+        self.btn_activate.setEnabled(False)
+
+        if self.btn_activate.text() == "Activate":
+            self.cb_model_selctor.setEnabled(False)
+            self.btn_load_model.setEnabled(False)
+            self.cb_input_image_selctor.setEnabled(False)
+            self.cb_output_label_selctor.setEnabled(False)
+            self.le_number_of_classes.setEnabled(False)
+
+
+            if self.rb_annotation_mode_click.isChecked():
+                self.annotator_mode = AnnotatorMode.CLICK
+                self.rb_annotation_mode_automatic.setEnabled(False)
+                self.rb_annotation_mode_automatic.setStyleSheet("color: gray")
+            
+            elif self.rb_annotation_mode_automatic.isChecked():
+                self.annotator_mode = AnnotatorMode.AUTO
+                self.rb_annotation_mode_click.setEnabled(False)
+                self.rb_annotation_mode_click.setStyleSheet("color: gray")
+        
+            self.btn_activate.setText("Deactivate")
+
+            #self.external_handler_btn_activate(self.annotator_mode)
+        
+        else:
+            #self.external_handler_btn_deactivate()
+
+            self.cb_model_selctor.setEnabled(True)
+            self.btn_load_model.setEnabled(True)
+            self.cb_input_image_selctor.setEnabled(True)
+            self.cb_output_label_selctor.setEnabled(True)
+            self.le_number_of_classes.setEnabled(True)
+            
+            self.rb_annotation_mode_click.setEnabled(True)
+            self.rb_annotation_mode_click.setStyleSheet("")
+            self.rb_annotation_mode_automatic.setEnabled(True)
+            self.rb_annotation_mode_automatic.setStyleSheet("")
+
+            self.btn_activate.setText("Activate")
+
+        self.btn_activate.setEnabled(True)
+            
+
     def _check_activate_btn(self):
         if (
             self.loaded_model is not None and
@@ -494,8 +539,9 @@ class UiElements:
     def set_external_handler_btn_load_model(self, handler):
         self.external_handler_btn_load_model = handler
 
-    def set_external_handler_btn_activate(self, handler):
-        self.external_handler_btn_activate = handler
+    def set_external_handler_btn_activate(self, activate_handler, deactivate_handler):
+        self.external_handler_btn_activate = activate_handler
+        self.external_handler_btn_deactivate = deactivate_handler
 
     ################################ externally activated UI elements ################################
 
