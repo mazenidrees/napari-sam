@@ -496,11 +496,10 @@ class UiElements:
                 self.rb_annotation_mode_click.setStyleSheet("color: gray")
         
             self.btn_activate.setText("Deactivate")
-
-            #self.external_handler_btn_activate(self.annotator_mode)
+            self.external_handler_btn_activate(self.annotator_mode)
         
         else:
-            #self.external_handler_btn_deactivate()
+            self.external_handler_btn_deactivate()
 
             self.cb_model_selctor.setEnabled(True)
             self.btn_load_model.setEnabled(True)
