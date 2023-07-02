@@ -74,14 +74,14 @@ class SamWidget(QWidget):
 
         self.sam_model = None
         self.sam_predictor = None
-        self.points = [] # (D, H, W)
-        self.points_labels = []
+
         
         self.setLayout(self.ui_elements.main_layout)
 
         #### setting up ui callbacks ####
         self.ui_elements.set_external_handler_btn_load_model(self.load_model)
         self.ui_elements.set_external_handler_btn_activate(self.activate, self.deactivate)
+        self.ui_elements.set_external_handler_btn_submit_to_class(self.submit_to_class)
     ################################ model loading ################################
     def load_model(self, model_type):
         if not torch.cuda.is_available():
@@ -145,7 +145,8 @@ class SamWidget(QWidget):
         self.adjust_image_layer_shape()
         self.check_image_dimension()
         self.set_sam_logits()
-
+        self.points_layer = None
+        self.submit_to_class(1) # init
         if annotator_mode == AnnotatorMode.AUTO:
             self.activate_annotation_mode_auto()
 
@@ -394,8 +395,8 @@ class SamWidget(QWidget):
                                     labels=copy.deepcopy(self.points_labels), 
                                     x_coord=copy.deepcopy(x_coord))
 
-        #self.update_points_layer(self.points) #TODO: add again
-        self.update_label_layer(prediction, 1) #TODO: add again
+        self.update_points_layer() #TODO: add again
+        self.update_label_layer(prediction, 50) #TODO: add again
 
 
     def predict_sam(self, points, labels, x_coord=None):
@@ -461,14 +462,14 @@ class SamWidget(QWidget):
         return prediction
 
 
-    def update_points_layer(self, points):
+    def update_points_layer(self):
         self.point_size = 10 # TODO: int(self.le_point_size.text())
         selected_layer = None
         if self.viewer.layers.selection.active != self.points_layer:
             selected_layer = self.viewer.layers.selection.active
         if self.points_layer is not None:
             self.viewer.layers.remove(self.points_layer)
-
+        """ 
         points_flattened = []
         colors_flattended = []
         if points is not None:
@@ -477,10 +478,10 @@ class SamWidget(QWidget):
                 color = self.label_color_mapping["label_mapping"][label]
                 colors = [color] * len(label_points)
                 colors_flattended.extend(colors)
-
+        """
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=UserWarning)
-            self.points_layer = self.viewer.add_points(name=self.points_layer_name, data=np.asarray(points_flattened), face_color=colors_flattended, edge_color="white", size=self.point_size)
+            self.points_layer = self.viewer.add_points(name="ignore this layer", data=np.asarray(self.points), size=self.point_size)
         self.points_layer.editable = False
 
         if selected_layer is not None:
@@ -488,7 +489,7 @@ class SamWidget(QWidget):
         self.points_layer.refresh()
 
 
-    def update_label_layer(self,prediction, point_label):
+    def update_label_layer(self,prediction, point_label): # TODO: add 3D support
 
         # If image layer is 2-dimensional, change x_coord to slice object which selects everything
         if self.image_layer.ndim == 2:
@@ -499,11 +500,26 @@ class SamWidget(QWidget):
         # Reset label_layer for the current class
         label_layer[x_coord][label_layer[x_coord] == point_label] = 0 # this is equivalent to label_layer[label_layer == point_label] = 0 when ndim == 2
         
-        label_layer[prediction == 1] = point_label
-
+        label_layer[prediction == 1] = point_label # TODO: I think it should be label_layer[x_coord][prediction == 1] = point_label for 3D
+        label_layer[prediction != 1] = self.temp_label_layer[prediction != 1]
         # Update the data attribute of label_layer object with the modified label_layer array
         self.label_layer.data = label_layer
 
+    def submit_to_class(self, class_id):
+        self.points = []
+        self.points_labels = []
+        self.update_points_layer()
+        if self.image_layer.ndim == 2:
+            x_coord = slice(None, None)
 
+        label_layer = np.asarray(self.label_layer.data)
+
+        label_layer[x_coord][label_layer == 50] = class_id # TODO: I think it should be label_layer[x_coord][prediction == 1] = point_label for 3D
+        label_layer[x_coord][label_layer[x_coord] == 50] = 0 # this is equivalent to label_layer[label_layer == point_label] = 0 when ndim == 2
+        # Update the data attribute of label_layer object with the modified label_layer array
+        self.label_layer.data = label_layer
+        self.temp_label_layer = np.copy(label_layer)
     def deactivate(self):
         pass
+
+    
