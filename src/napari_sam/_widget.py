@@ -67,8 +67,16 @@ SAM_MODELS = {
 class SamWidget(QWidget):
     def __init__(self, napari_viewer):
         super().__init__()
+        # TODO: make sure to reset everything when switching images
         self.viewer = napari_viewer
         self.ui_elements = UiElements(self.viewer)
+
+
+        self.sam_model = None
+        self.sam_predictor = None
+        self.points = [] # (D, H, W)
+        self.points_labels = []
+        
         self.setLayout(self.ui_elements.main_layout)
 
         #### setting up ui callbacks ####
@@ -78,17 +86,15 @@ class SamWidget(QWidget):
     def load_model(self, model_type):
         if not torch.cuda.is_available():
             if not torch.backends.mps.is_available():
-                self.device = "cpu"
+                device = "cpu"
             else:
-                self.device = "mps"
+                device = "mps"
         else:
-            self.device = "cuda"
+            device = "cuda"
         self.sam_model = SAM_MODELS[model_type]["model"](self.get_weights_path(model_type))
 
-        self.sam_model.to(self.device)
-        print("debug 4")
+        self.sam_model.to(device)
         self.sam_predictor = SamPredictor(self.sam_model)
-        print("debug 5")
 
     def get_weights_path(self, model_type):
         weight_url = SAM_MODELS[model_type]["url"]
@@ -199,86 +205,7 @@ class SamWidget(QWidget):
                                                                 min_mask_region_area=int(self.ui_elements.le_minimum_mask_region_area.text()),
                                                                 )
         prediction = self.predict_everything()
-        print(prediction)
         self.label_layer.data = prediction
-
-
-    #### click
-    def activate_annotation_mode_click(self):
-            if self.image_layer.ndim == 2:
-                self.point_size = max(int(np.min(self.image_layer.data.shape[:2]) / 100), 1)
-            else:
-                self.point_size = 2
-
-            self.create_label_color_mapping()
-
-            """ TODO: add again when done with history
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore", category=FutureWarning)
-                self._history_limit = self.label_layer._history_limit
-            self._reset_history()
-             """
-
-            self.image_layer.events.contrast_limits.connect(qdebounced(self.on_contrast_limits_change, timeout=1000))
-
-            self.set_image()
-            
-            """ # TODO: add again
-            self.update_points_layer(None)
-            self.viewer.mouse_drag_callbacks.append(self.callback_click)
-            self.viewer.keymap['Delete'] = self.on_delete
-            self.label_layer.keymap['Control-Z'] = self.on_undo
-            self.label_layer.keymap['Control-Shift-Z'] = self.on_redo
-             """
-
-    def create_label_color_mapping(self, num_labels=1000):
-        self.label_color_mapping = {"label_mapping": {}, "color_mapping": {}}
-        for label in range(num_labels):
-            color = self.label_layer.get_color(label)
-            self.label_color_mapping["label_mapping"][label] = color
-            self.label_color_mapping["color_mapping"][str(color)] = label
-
-    def set_image(self):
-        contrast_limits = self.image_layer.contrast_limits
-        if self.image_layer.ndim == 2:
-            image = np.asarray(self.image_layer.data)
-            self.sam_features = self.extract_feature_embeddings_2D(image, contrast_limits)
-        
-        elif self.image_layer.ndim == 3:
-            total_slices = self.image_layer.data.shape[0]
-
-            self.ui_elements.create_progress_bar(total_slices, "Creating SAM image embedding:")
-
-            self.sam_features = []
-            for index in range(total_slices):
-                image_slice = np.asarray(self.image_layer.data[index, ...])
-
-                self.sam_features.append(self.extract_feature_embeddings_2D(image_slice, contrast_limits))
-                self.ui_elements.update_progress_bar(index+1)
-
-            self.ui_elements.delete_progress_bar()
-
-
-    def extract_feature_embeddings_2D(self, image, contrast_limits):
-        image = self.prepare_image_for_sam(image, contrast_limits)
-        self.sam_predictor.set_image(image)
-        return self.sam_predictor.features
-
-    def predict_everything_2D(self, image, contrast_limits):
-        image = self.prepare_image_for_sam(image, contrast_limits)
-        records = self.sam_anything_predictor.generate(image)#
-        masks = np.asarray([record["segmentation"] for record in records])#
-        print(masks.shape)
-        prediction = np.argmax(masks, axis=0)
-        return prediction
-
-    def prepare_image_for_sam(self, image, contrast_limits):
-        if not self.image_layer.rgb:
-            image = np.stack((image,) * 3, axis=-1)  # Expand to 3-channel image
-        image = image[..., :3]  # Remove a potential alpha channel
-        image = normalize(image, source_limits=contrast_limits, target_limits=(0, 255)).astype(np.uint8)#
-        return image
-    
 
     def predict_everything(self):
         contrast_limits = self.image_layer.contrast_limits
@@ -300,7 +227,14 @@ class SamWidget(QWidget):
         else:
             raise RuntimeError("Only 2D and 3D images are supported.")
         return prediction
-    
+
+    def predict_everything_2D(self, image, contrast_limits):
+        image = self.prepare_image_for_sam(image, contrast_limits)
+        records = self.sam_anything_predictor.generate(image)#
+        masks = np.asarray([record["segmentation"] for record in records])#
+        prediction = np.argmax(masks, axis=0)
+        return prediction 
+
     def merge_classes_over_slices(self, prediction, threshold=0.5):  # Currently only computes overlap from next_slice to current_slice but not vice versa
         for i in range(prediction.shape[0] - 1):
             current_slice = prediction[i]
@@ -345,8 +279,231 @@ class SamWidget(QWidget):
         return prediction
      """
 
+    #### click
+    def activate_annotation_mode_click(self):
+            if self.image_layer.ndim == 2:
+                self.point_size = max(int(np.min(self.image_layer.data.shape[:2]) / 100), 1)
+            else:
+                self.point_size = 2
+
+            #self.create_label_color_mapping() TODO: add again
+
+            """ TODO: add again when done with history
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=FutureWarning)
+                self._history_limit = self.label_layer._history_limit
+            self._reset_history()
+             """
+
+            self.image_layer.events.contrast_limits.connect(qdebounced(self.on_contrast_limits_change, timeout=1000))
+             
+            self.set_image() 
+            #self.update_points_layer(None)
+            self.viewer.mouse_drag_callbacks.append(self.callback_click)
+           
+            """ # TODO: add again
+            self.viewer.keymap['Delete'] = self.on_delete
+            self.label_layer.keymap['Control-Z'] = self.on_undo
+            self.label_layer.keymap['Control-Shift-Z'] = self.on_redo
+             """
+
+    def create_label_color_mapping(self, num_labels=1000):
+        self.label_color_mapping = {"label_mapping": {}, "color_mapping": {}}
+        for label in range(num_labels):
+            color = self.label_layer.get_color(label)
+            self.label_color_mapping["label_mapping"][label] = color
+            self.label_color_mapping["color_mapping"][str(color)] = label
+
+    def set_image(self):
+        contrast_limits = self.image_layer.contrast_limits
+        if self.image_layer.ndim == 2:
+            image = np.asarray(self.image_layer.data)
+            self.sam_features = self.extract_feature_embeddings_2D(image, contrast_limits)
+        
+        elif self.image_layer.ndim == 3:
+            total_slices = self.image_layer.data.shape[0]
+
+            self.ui_elements.create_progress_bar(total_slices, "Creating SAM image embedding:")
+
+            self.sam_features = []
+            for index in range(total_slices):
+                image_slice = np.asarray(self.image_layer.data[index, ...])
+                self.sam_features.append(self.extract_feature_embeddings_2D(image_slice, contrast_limits))
+                self.ui_elements.update_progress_bar(index+1)
+
+            self.ui_elements.delete_progress_bar()
+
+    def extract_feature_embeddings_2D(self, image, contrast_limits):
+        image = self.prepare_image_for_sam(image, contrast_limits)
+        self.sam_predictor.set_image(image)
+        return self.sam_predictor.features
+
+    def prepare_image_for_sam(self, image, contrast_limits):
+        if not self.image_layer.rgb:
+            image = np.stack((image,) * 3, axis=-1)  # Expand to 3-channel image
+        image = image[..., :3]  # Remove a potential alpha channel
+        image = normalize(image, source_limits=contrast_limits, target_limits=(0, 255)).astype(np.uint8)#
+        return image
+
     def on_contrast_limits_change(self):
         self.set_image()
+
+    def callback_click(self, layer, event):
+        """ decides what to do when a click is performed on the image and calls the corresponding function """
+        data_coordinates = self.image_layer.world_to_data(event.position)
+        coords = np.round(data_coordinates).astype(int)
+        print(f"the selected point is: {coords}")
+        if (not CONTROL in event.modifiers) and event.button == 3:  # Positive middle click
+            self.do_point_click(coords, 1)
+            yield
+        elif CONTROL in event.modifiers and event.button == 3:  # Negative middle click
+            self.do_point_click(coords, 0)
+            yield
+        elif (not CONTROL in event.modifiers) and event.button == 1 and self.points_layer is not None and len(self.points_layer.data) > 0:
+            # Find the closest point to the mouse click
+            distances = np.linalg.norm(self.points_layer.data - coords, axis=1)
+            closest_point_idx = np.argmin(distances)
+            closest_point_distance = distances[closest_point_idx]
+
+            # Select the closest point if it's within self.point_size pixels of the click
+            if closest_point_distance <= self.point_size:
+                self.points_layer.selected_data = {closest_point_idx}
+            else:
+                self.points_layer.selected_data = set()
+            yield
+        elif (CONTROL in event.modifiers) and event.button == 1:
+            picked_label = self.label_layer.data[slicer(self.label_layer.data, coords)]
+            self.label_layer.selected_label = picked_label
+            yield
+
+
+    def do_point_click(self, coords, is_positive):
+        """ checks for repeated points, adds the point to the points list and calls the prediction function"""
+        # Check if there is already a point at these coordinates
+        for point in self.points:
+            if np.array_equal(coords, point):
+                warnings.warn("There is already a point in this location. This click will be ignored.")
+                return
+
+        self.points_labels.append(is_positive)
+        self.points.append(coords)
+
+        x_coord = coords[0]
+        
+        prediction = self.predict_sam(points=copy.deepcopy(self.points), 
+                                    labels=copy.deepcopy(self.points_labels), 
+                                    x_coord=copy.deepcopy(x_coord))
+
+        #self.update_points_layer(self.points) #TODO: add again
+        self.update_label_layer(prediction, 1) #TODO: add again
+
+
+    def predict_sam(self, points, labels, x_coord=None):
+        if self.image_layer.ndim == 2:
+            points = np.array(points)
+            points = np.flip(points, axis=-1)
+            labels = np.array(labels)
+
+
+            """ TODO: maybe use later
+            logits = self.sam_logits
+            if not self.check_prev_mask.isChecked():
+                logits = None
+            """
+            logits = None
+            self.sam_predictor.features = self.sam_features
+            prediction, _, self.sam_logits = self.sam_predictor.predict(
+                point_coords=points,
+                point_labels=labels,
+                mask_input=logits,
+                multimask_output=False,
+            )
+            prediction =prediction.squeeze(axis=0) # was (1,h,w) because multimask_output=False
+        # TODO: add 3D support
+        elif self.image_layer.ndim == 3:
+            prediction = np.zeros_like(self.label_layer.data)
+
+            # Convert list of arrays to a 2D numpy array
+            points = np.array(points)
+            x_coords = np.unique(points[:, 0])
+
+            # Group points if they are on the same image slice
+            groups = {x_coord: list(points[points[:, 0] == x_coord]) for x_coord in x_coords}
+
+            # Extract group points and labels
+            group_points = groups[x_coord]
+            group_labels = [labels[np.argwhere(np.all(points == point, axis=1)).flatten()[0]] for point in group_points]
+
+            # Convert points to yz-coordinates by removing x-coordinate
+            group_points = [point[1:] for point in group_points]
+
+            # Flip coordinates and convert labels to numpy array
+            points = np.flip(group_points, axis=-1)
+            labels = np.asarray(group_labels)
+
+            # Prediction process
+            self.sam_predictor.features = self.sam_features[x_coord]
+            #logits = self.sam_logits[x_coord] if not self.check_prev_mask.isChecked() else None TODO: maybe use later
+            logits = None
+            prediction_yz, _, self.sam_logits[x_coord] = self.sam_predictor.predict(
+                point_coords=points,
+                point_labels=labels,
+                mask_input=logits,
+                multimask_output=False,
+            )
+            
+            # Adjust shape of prediction_yz and update prediction array
+            prediction_yz = prediction_yz.squeeze(axis=0) # was (1,h,w) because multimask_output=False
+            prediction[x_coord, :, :] = prediction_yz
+
+        else:
+            raise RuntimeError("Only 2D and 3D images are supported.")
+        return prediction
+
+
+    def update_points_layer(self, points):
+        self.point_size = 10 # TODO: int(self.le_point_size.text())
+        selected_layer = None
+        if self.viewer.layers.selection.active != self.points_layer:
+            selected_layer = self.viewer.layers.selection.active
+        if self.points_layer is not None:
+            self.viewer.layers.remove(self.points_layer)
+
+        points_flattened = []
+        colors_flattended = []
+        if points is not None:
+            for label, label_points in points.items():
+                points_flattened.extend(label_points)
+                color = self.label_color_mapping["label_mapping"][label]
+                colors = [color] * len(label_points)
+                colors_flattended.extend(colors)
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=UserWarning)
+            self.points_layer = self.viewer.add_points(name=self.points_layer_name, data=np.asarray(points_flattened), face_color=colors_flattended, edge_color="white", size=self.point_size)
+        self.points_layer.editable = False
+
+        if selected_layer is not None:
+            self.viewer.layers.selection.active = selected_layer
+        self.points_layer.refresh()
+
+
+    def update_label_layer(self,prediction, point_label):
+
+        # If image layer is 2-dimensional, change x_coord to slice object which selects everything
+        if self.image_layer.ndim == 2:
+            x_coord = slice(None, None)
+
+        label_layer = np.asarray(self.label_layer.data)
+
+        # Reset label_layer for the current class
+        label_layer[x_coord][label_layer[x_coord] == point_label] = 0 # this is equivalent to label_layer[label_layer == point_label] = 0 when ndim == 2
+        
+        label_layer[prediction == 1] = point_label
+
+        # Update the data attribute of label_layer object with the modified label_layer array
+        self.label_layer.data = label_layer
+
 
     def deactivate(self):
         pass
