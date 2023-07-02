@@ -60,32 +60,28 @@ SAM_MODELS = {
     "MedSAM": {"filename": "sam_vit_b_01ec64_medsam.pth", "url": "https://syncandshare.desy.de/index.php/s/yLfdFbpfEGSHJWY/download/medsam_20230423_vit_b_0.0.1.pth", "model": build_sam_vit_b},
 }
 
-class LayerSelector(QListWidget):
-    def __init__(self, viewer, layer_type):
+class ClassSelector(QListWidget):
+    def __init__(self, viewer):
         super().__init__()
         self.viewer = viewer
-        self.layer_type = layer_type  # Save layer type
-        self.update_layers()  # Update layers at startup
-
+        self.update_layers()
         # connect a method to the itemSelectionChanged signal
         self.itemSelectionChanged.connect(self.item_selected)
 
-    def update_layers(self, event=None):
+    def update_layers(self, number_of_classes=None):
         # Remove all items
         self.clear()
-
-        # Add all label layers
-        for layer in self.viewer.layers:
-            if isinstance(layer, self.layer_type):  # Use the stored layer type
-                self.addItem(layer.name)
+        if is_number(number_of_classes):
+            for i in range(int(number_of_classes)):
+                self.addItem(f"class {i+1}")
 
         # Adjust the height of the QListWidget based on the content
         self.adjust_height()
 
     def item_selected(self):
         # get the text of the currently selected item
-        selected_layer = self.currentItem().text()
-        print(f'Selected label: {selected_layer}')
+        selected_index = self.currentRow()
+        print(f'Selected index: {selected_index}')
 
     def adjust_height(self):
         # The minimum height of QListWidget
@@ -116,7 +112,7 @@ class UiElements:
         self.le_number_of_classes = None
         self.rb_click_mode = None
         self.rb_annotation_mode_automatic = None
-        self.ls_label_selector = None
+        self.cs_label_selector = None
         self.btn_activate = None
         self.btn_submit_to_class = None
 
@@ -136,9 +132,6 @@ class UiElements:
         self._init_main_layout()
         self._init_UI_signals()
 
-        self.viewer.layers.events.inserted.connect(self._update_UI) # TODO make spacial cases instead of updating everything
-        self.viewer.layers.events.removed.connect(self._update_UI)
-        self.le_number_of_classes.textChanged.connect(self._update_UI)
 
     ################################ UI elements ################################
 
@@ -220,22 +213,20 @@ class UiElements:
         l_label_selector = QLabel("Select class:")
         self.main_layout.addWidget(l_label_selector)
 
-        self.ls_label_selector = LayerSelector(self.viewer, napari.layers.Labels)  # No callback function
-        self.ls_label_selector.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
-        self.main_layout.addWidget(self.ls_label_selector)
+        self.cs_label_selector = ClassSelector(self.viewer)  # No callback function
+        self.cs_label_selector.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+        self.main_layout.addWidget(self.cs_label_selector)
 
     def _init_activation_button(self):
         self.btn_activate = QPushButton("Activate")
         #self.btn_activate.clicked.connect(self._activate) #### TODO: Callback function is defined externally through a setter function below
         self.btn_activate.setEnabled(False)
-        self.is_active = False
         self.main_layout.addWidget(self.btn_activate)
 
     def _init_submit_to_class_button(self):
         self.btn_submit_to_class = QPushButton("submit to class")
         #self.btn_activate.clicked.connect(self._activate) #### TODO: Callback function is defined externally through a setter function below
         self.btn_submit_to_class.setEnabled(False)
-        self.is_active = False
         self.main_layout.addWidget(self.btn_submit_to_class)
 
     def _init_tooltip(self):
@@ -414,6 +405,11 @@ class UiElements:
         self.cb_model_selctor.currentTextChanged.connect(self._update_model_selection_combobox_and_button)
         self.btn_load_model.clicked.connect(self._internal_handler_btn_load_model) 
         self.btn_activate.clicked.connect(self._internal_handler_btn_activate)
+        self.btn_submit_to_class.clicked.connect(self._internal_handler_btn_submit_to_class)
+        
+        self.viewer.layers.events.inserted.connect(self._update_UI) # TODO make spacial cases instead of updating everything
+        self.viewer.layers.events.removed.connect(self._update_UI)
+        self.le_number_of_classes.textChanged.connect(self._update_UI)
 
         #self.rb_click.clicked.connect(self.on_everything_mode_checked) # TODO: change UI elements to reflect the mode
         #self.rb_auto.clicked.connect(self.on_everything_mode_checked)  # TODO: change UI elements to reflect the mode
@@ -421,9 +417,9 @@ class UiElements:
     def _update_UI(self):
         self._update_layer_selection_combobox(self.cb_input_image_selctor, napari.layers.Image)
         self._update_layer_selection_combobox(self.cb_output_label_selctor, napari.layers.Labels)
-        self.ls_label_selector.update_layers()
+        self.cs_label_selector.update_layers(self.le_number_of_classes.text())
         self._check_activate_btn()
-        self._update_submit_to_class_btn()
+  
 
     ################################ internal signals ################################
 
@@ -476,14 +472,13 @@ class UiElements:
 
     def _internal_handler_btn_activate(self):
         self.btn_activate.setEnabled(False)
-
         if self.btn_activate.text() == "Activate":
             self.cb_model_selctor.setEnabled(False)
             self.btn_load_model.setEnabled(False)
             self.cb_input_image_selctor.setEnabled(False)
             self.cb_output_label_selctor.setEnabled(False)
             self.le_number_of_classes.setEnabled(False)
-
+            self.btn_submit_to_class.setEnabled(True)
 
             if self.rb_annotation_mode_click.isChecked():
                 self.annotator_mode = AnnotatorMode.CLICK
@@ -512,10 +507,13 @@ class UiElements:
             self.rb_annotation_mode_automatic.setEnabled(True)
             self.rb_annotation_mode_automatic.setStyleSheet("")
 
+            self.btn_submit_to_class.setEnabled(False)
+
             self.btn_activate.setText("Activate")
 
         self.btn_activate.setEnabled(True)
-            
+    def _internal_handler_btn_submit_to_class(self):
+        self.external_handler_btn_submit_to_class(self.cs_label_selector.currentRow()+1)
 
     def _check_activate_btn(self):
         if (
@@ -528,11 +526,6 @@ class UiElements:
         else:
             self.btn_activate.setEnabled(False)
 
-    def _update_submit_to_class_btn(self):
-        if self.is_active:
-            self.btn_submit_to_class.setEnabled(True)
-        else:
-            self.btn_submit_to_class.setEnabled(False)
     ################################ set external signals ################################
 
     def set_external_handler_btn_load_model(self, handler):
@@ -542,6 +535,8 @@ class UiElements:
         self.external_handler_btn_activate = activate_handler
         self.external_handler_btn_deactivate = deactivate_handler
 
+    def set_external_handler_btn_submit_to_class(self, handler):
+        self.external_handler_btn_submit_to_class = handler
     ################################ externally activated UI elements ################################
 
     def create_progress_bar(self, max_value, text):
@@ -586,9 +581,11 @@ def get_cached_models(SAM_MODELS: dict, loaded_model: str) -> tuple:
             entries.append(f"{name} (Auto-Download)")
     return cached_models, entries
 
-def is_number(input_string: str):
+def is_number(input_string):
     try:
-        float(input_string)
+        int(input_string)
         return True
     except ValueError:
+        return False
+    except TypeError:
         return False
