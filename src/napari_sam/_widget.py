@@ -30,7 +30,12 @@ from segment_anything import (
 )
 from segment_anything.automatic_mask_generator import SamAutomaticMaskGenerator
 
-
+from mobile_sam import (
+    sam_model_registry,
+    SamAutomaticMaskGenerator as SamAutomaticMaskGeneratorMobile,
+    SamPredictor as SamPredictorMobile,
+    build_sam_vit_t
+)
 
 class SegmentationMode(Enum):
     SEMANTIC = 0
@@ -47,6 +52,7 @@ SAM_MODELS = {
     "vit_l": {"filename": "sam_vit_l_0b3195.pth", "url": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_l_0b3195.pth", "model": build_sam_vit_l},
     "vit_b": {"filename": "sam_vit_b_01ec64.pth", "url": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth", "model": build_sam_vit_b},
     "MedSAM": {"filename": "sam_vit_b_01ec64_medsam.pth", "url": "https://syncandshare.desy.de/index.php/s/yLfdFbpfEGSHJWY/download/medsam_20230423_vit_b_0.0.1.pth", "model": build_sam_vit_b},
+    "MobileSAM" : {"filename": "mobile_sam.pt", "url": "https://github.com/ChaoningZhang/MobileSAM/blob/master/weights/mobile_sam.pt?raw=true", "model": build_sam_vit_t}
 }
 
 class SamWidget(QWidget):
@@ -79,7 +85,11 @@ class SamWidget(QWidget):
         self.sam_model = SAM_MODELS[model_type]["model"](self.get_weights_path(model_type))
 
         self.sam_model.to(device)
-        self.sam_predictor = SamPredictor(self.sam_model)
+        if model_type == "MobileSAM":
+            self.sam_predictor = SamPredictorMobile(self.sam_model)
+            self.is_mobile_sam = True
+        else:
+            self.sam_predictor = SamPredictor(self.sam_model)
 
     def get_weights_path(self, model_type):
         weight_url = SAM_MODELS[model_type]["url"]
@@ -181,21 +191,28 @@ class SamWidget(QWidget):
 
     #### auto
     def activate_annotation_mode_auto(self):
-        self.sam_anything_predictor = SamAutomaticMaskGenerator(self.sam_model,
-                                                                points_per_side=int(self.ui_elements.le_points_per_side.text()),
-                                                                points_per_batch=int(self.ui_elements.le_points_per_batch.text()),
-                                                                pred_iou_thresh=float(self.ui_elements.le_prediction_iou_threshold.text()),
-                                                                stability_score_thresh=float(self.ui_elements.le_stability_score_threshold.text()),
-                                                                stability_score_offset=float(self.ui_elements.le_stability_score_offset.text()),
-                                                                box_nms_thresh=float(self.ui_elements.le_box_nms_threshold.text()),
-                                                                crop_n_layers=int(self.ui_elements.le_crop_n_layers.text()),
-                                                                crop_nms_thresh=float(self.ui_elements.le_crop_nms_threshold.text()),
-                                                                crop_overlap_ratio=float(self.ui_elements.le_crop_overlap_ratio.text()),
-                                                                crop_n_points_downscale_factor=int(self.ui_elements.le_crop_n_points_downscale_factor.text()),
-                                                                min_mask_region_area=int(self.ui_elements.le_minimum_mask_region_area.text()),
-                                                                )
+        shared_args = {
+            'points_per_side': int(self.ui_elements.le_points_per_side.text()),
+            'points_per_batch': int(self.ui_elements.le_points_per_batch.text()),
+            'pred_iou_thresh': float(self.ui_elements.le_prediction_iou_threshold.text()),
+            'stability_score_thresh': float(self.ui_elements.le_stability_score_threshold.text()),
+            'stability_score_offset': float(self.ui_elements.le_stability_score_offset.text()),
+            'box_nms_thresh': float(self.ui_elements.le_box_nms_threshold.text()),
+            'crop_n_layers': int(self.ui_elements.le_crop_n_layers.text()),
+            'crop_nms_thresh': float(self.ui_elements.le_crop_nms_threshold.text()),
+            'crop_overlap_ratio': float(self.ui_elements.le_crop_overlap_ratio.text()),
+            'crop_n_points_downscale_factor': int(self.ui_elements.le_crop_n_points_downscale_factor.text()),
+            'min_mask_region_area': int(self.ui_elements.le_minimum_mask_region_area.text()),
+        }
+
+        if self.is_mobile_sam:
+            self.sam_anything_predictor = SamAutomaticMaskGeneratorMobile(self.sam_model, **shared_args)
+        else:
+            self.sam_anything_predictor = SamAutomaticMaskGenerator(self.sam_model, **shared_args)
+
         prediction = self.predict_everything()
         self.label_layer.data = prediction
+
 
     def predict_everything(self):
         contrast_limits = self.image_layer.contrast_limits

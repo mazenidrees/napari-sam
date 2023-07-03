@@ -47,6 +47,10 @@ from segment_anything import (
 )
 from segment_anything.automatic_mask_generator import SamAutomaticMaskGenerator
 
+from mobile_sam import (
+    build_sam_vit_t
+)
+
 class AnnotatorMode(Enum):
     NONE = 0
     CLICK = 1
@@ -58,6 +62,7 @@ SAM_MODELS = {
     "vit_l": {"filename": "sam_vit_l_0b3195.pth", "url": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_l_0b3195.pth", "model": build_sam_vit_l},
     "vit_b": {"filename": "sam_vit_b_01ec64.pth", "url": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth", "model": build_sam_vit_b},
     "MedSAM": {"filename": "sam_vit_b_01ec64_medsam.pth", "url": "https://syncandshare.desy.de/index.php/s/yLfdFbpfEGSHJWY/download/medsam_20230423_vit_b_0.0.1.pth", "model": build_sam_vit_b},
+    "MobileSAM" : {"filename": "mobile_sam.pt", "url": "https://github.com/ChaoningZhang/MobileSAM/blob/master/weights/mobile_sam.pt?raw=true", "model": build_sam_vit_t}
 }
 
 class ClassSelector(QListWidget):
