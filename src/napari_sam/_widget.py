@@ -1,8 +1,6 @@
 import copy
-import inspect
 import numpy as np
-import os
-from collections import deque, defaultdict
+
 from enum import Enum
 from os.path import join
 from pathlib import Path
@@ -13,23 +11,10 @@ import napari
 import torch
 from tqdm import tqdm
 from vispy.util.keys import CONTROL
-from qtpy import QtCore
-from qtpy.QtCore import Qt
-from qtpy.QtGui import QIntValidator, QDoubleValidator
+
 from qtpy.QtWidgets import (
-    QVBoxLayout,
-    QPushButton,
     QWidget,
-    QLabel,
-    QComboBox,
-    QRadioButton,
-    QGroupBox,
-    QProgressBar,
     QApplication,
-    QScrollArea,
-    QLineEdit,
-    QCheckBox,
-    QListWidget,
 )
 from collections import Counter
 from superqt.utils import qdebounced
@@ -74,7 +59,7 @@ class SamWidget(QWidget):
 
         self.sam_model = None
         self.sam_predictor = None
-
+        self.temp_class_id = 95 # corresponds to green color
         
         self.setLayout(self.ui_elements.main_layout)
 
@@ -142,6 +127,10 @@ class SamWidget(QWidget):
     ################################ activating sam ################################
     def activate(self, annotator_mode):
         self.set_layers()
+        if self.image_layer.ndim == 2:
+            self.point_size = max(int(np.min(self.image_layer.data.shape[:2]) / 100), 1)
+        else:
+            self.point_size = 2
         self.adjust_image_layer_shape()
         self.check_image_dimension()
         self.set_sam_logits()
@@ -282,11 +271,6 @@ class SamWidget(QWidget):
 
     #### click
     def activate_annotation_mode_click(self):
-            if self.image_layer.ndim == 2:
-                self.point_size = max(int(np.min(self.image_layer.data.shape[:2]) / 100), 1)
-            else:
-                self.point_size = 2
-
             #self.create_label_color_mapping() TODO: add again
 
             """ TODO: add again when done with history
@@ -297,11 +281,10 @@ class SamWidget(QWidget):
              """
 
             self.image_layer.events.contrast_limits.connect(qdebounced(self.on_contrast_limits_change, timeout=1000))
-             
-            self.set_image() 
-            #self.update_points_layer(None)
             self.viewer.mouse_drag_callbacks.append(self.callback_click)
-           
+
+            self.set_image()
+
             """ # TODO: add again
             self.viewer.keymap['Delete'] = self.on_delete
             self.label_layer.keymap['Control-Z'] = self.on_undo
@@ -316,28 +299,31 @@ class SamWidget(QWidget):
             self.label_color_mapping["color_mapping"][str(color)] = label
 
     def set_image(self):
-        contrast_limits = self.image_layer.contrast_limits
+        self.sam_features = self.extract_feature_embeddings(self.image_layer.data, self.image_layer.contrast_limits)
+
+    def extract_feature_embeddings(self, image, contrast_limits):
         if self.image_layer.ndim == 2:
-            image = np.asarray(self.image_layer.data)
-            self.sam_features = self.extract_feature_embeddings_2D(image, contrast_limits)
-        
+            return self.extract_feature_embeddings_2D(image, contrast_limits)
         elif self.image_layer.ndim == 3:
-            total_slices = self.image_layer.data.shape[0]
-
-            self.ui_elements.create_progress_bar(total_slices, "Creating SAM image embedding:")
-
-            self.sam_features = []
-            for index in range(total_slices):
-                image_slice = np.asarray(self.image_layer.data[index, ...])
-                self.sam_features.append(self.extract_feature_embeddings_2D(image_slice, contrast_limits))
-                self.ui_elements.update_progress_bar(index+1)
-
-            self.ui_elements.delete_progress_bar()
+            return self.extract_feature_embeddings_3D(image, contrast_limits)
 
     def extract_feature_embeddings_2D(self, image, contrast_limits):
         image = self.prepare_image_for_sam(image, contrast_limits)
         self.sam_predictor.set_image(image)
         return self.sam_predictor.features
+
+    def extract_feature_embeddings_3D(self, data, contrast_limits):
+        total_slices = data.shape[0]
+        self.ui_elements.create_progress_bar(total_slices, "Creating SAM image embedding:")
+        sam_features = []
+
+        for index, image_slice in enumerate(data):
+            image_slice = np.asarray(image_slice)
+            sam_features.append(self.extract_feature_embeddings_2D(image_slice, contrast_limits))
+            self.ui_elements.update_progress_bar(index + 1)
+
+        self.ui_elements.delete_progress_bar()
+        return sam_features
 
     def prepare_image_for_sam(self, image, contrast_limits):
         if not self.image_layer.rgb:
@@ -348,6 +334,8 @@ class SamWidget(QWidget):
 
     def on_contrast_limits_change(self):
         self.set_image()
+
+
 
     def callback_click(self, layer, event):
         """ decides what to do when a click is performed on the image and calls the corresponding function """
@@ -377,7 +365,6 @@ class SamWidget(QWidget):
             self.label_layer.selected_label = picked_label
             yield
 
-
     def do_point_click(self, coords, is_positive):
         """ checks for repeated points, adds the point to the points list and calls the prediction function"""
         # Check if there is already a point at these coordinates
@@ -395,9 +382,8 @@ class SamWidget(QWidget):
                                     labels=copy.deepcopy(self.points_labels), 
                                     x_coord=copy.deepcopy(x_coord))
 
-        self.update_points_layer() #TODO: add again
-        self.update_label_layer(prediction, 50) #TODO: add again
-
+        self.update_points_layer()
+        self.update_label_layer(prediction, self.temp_class_id, x_coord)
 
     def predict_sam(self, points, labels, x_coord=None):
         if self.image_layer.ndim == 2:
@@ -424,7 +410,6 @@ class SamWidget(QWidget):
         elif self.image_layer.ndim == 3:
             prediction = np.zeros_like(self.label_layer.data)
 
-            # Convert list of arrays to a 2D numpy array
             points = np.array(points)
             x_coords = np.unique(points[:, 0])
 
@@ -435,14 +420,13 @@ class SamWidget(QWidget):
             group_points = groups[x_coord]
             group_labels = [labels[np.argwhere(np.all(points == point, axis=1)).flatten()[0]] for point in group_points]
 
-            # Convert points to yz-coordinates by removing x-coordinate
+            # removing x-coordinate (depth)
             group_points = [point[1:] for point in group_points]
 
-            # Flip coordinates and convert labels to numpy array
+            # Flip because of sam coordinates system
             points = np.flip(group_points, axis=-1)
             labels = np.asarray(group_labels)
 
-            # Prediction process
             self.sam_predictor.features = self.sam_features[x_coord]
             #logits = self.sam_logits[x_coord] if not self.check_prev_mask.isChecked() else None TODO: maybe use later
             logits = None
@@ -461,64 +445,60 @@ class SamWidget(QWidget):
             raise RuntimeError("Only 2D and 3D images are supported.")
         return prediction
 
-
     def update_points_layer(self):
-        self.point_size = 10 # TODO: int(self.le_point_size.text())
         selected_layer = None
+
+        #save selected layer
         if self.viewer.layers.selection.active != self.points_layer:
             selected_layer = self.viewer.layers.selection.active
+
+
         if self.points_layer is not None:
             self.viewer.layers.remove(self.points_layer)
-        """ 
-        points_flattened = []
-        colors_flattended = []
-        if points is not None:
-            for label, label_points in points.items():
-                points_flattened.extend(label_points)
-                color = self.label_color_mapping["label_mapping"][label]
-                colors = [color] * len(label_points)
-                colors_flattended.extend(colors)
-        """
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=UserWarning)
             self.points_layer = self.viewer.add_points(name="ignore this layer", data=np.asarray(self.points), size=self.point_size)
         self.points_layer.editable = False
-
-        if selected_layer is not None:
-            self.viewer.layers.selection.active = selected_layer
         self.points_layer.refresh()
 
+        #reselect selected layer
+        if selected_layer is not None:
+            self.viewer.layers.selection.active = selected_layer
 
-    def update_label_layer(self,prediction, point_label): # TODO: add 3D support
 
-        # If image layer is 2-dimensional, change x_coord to slice object which selects everything
+
+    def update_label_layer(self,prediction, point_label, x_coord): # TODO: add 3D support
+
+        # x_coord selects everything
         if self.image_layer.ndim == 2:
             x_coord = slice(None, None)
 
         label_layer = np.asarray(self.label_layer.data)
-
+        print(label_layer.shape, prediction.shape, x_coord)
         # Reset label_layer for the current class
-        label_layer[x_coord][label_layer[x_coord] == point_label] = 0 # this is equivalent to label_layer[label_layer == point_label] = 0 when ndim == 2
+        label_layer[x_coord][label_layer[x_coord] == point_label] = 0
         
-        label_layer[prediction == 1] = point_label # TODO: I think it should be label_layer[x_coord][prediction == 1] = point_label for 3D
-        label_layer[prediction != 1] = self.temp_label_layer[prediction != 1]
-        # Update the data attribute of label_layer object with the modified label_layer array
+        label_layer[x_coord][prediction[x_coord] == 1] = point_label
+        label_layer[x_coord][prediction[x_coord] != 1] = self.temp_label_layer[x_coord][prediction[x_coord] != 1]
+
         self.label_layer.data = label_layer
+
 
     def submit_to_class(self, class_id):
         self.points = []
         self.points_labels = []
         self.update_points_layer()
-        if self.image_layer.ndim == 2:
-            x_coord = slice(None, None)
+        print(class_id)
 
         label_layer = np.asarray(self.label_layer.data)
+        print(f"shape of label_layer: {label_layer.shape}")
+        label_layer[label_layer == self.temp_class_id] = class_id
+        label_layer[label_layer == self.temp_class_id] = 0 
 
-        label_layer[x_coord][label_layer == 50] = class_id # TODO: I think it should be label_layer[x_coord][prediction == 1] = point_label for 3D
-        label_layer[x_coord][label_layer[x_coord] == 50] = 0 # this is equivalent to label_layer[label_layer == point_label] = 0 when ndim == 2
-        # Update the data attribute of label_layer object with the modified label_layer array
         self.label_layer.data = label_layer
         self.temp_label_layer = np.copy(label_layer)
+
+
     def deactivate(self):
         pass
 

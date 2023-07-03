@@ -187,7 +187,7 @@ class UiElements:
         self.g_annotation = QGroupBox("Annotation mode")
         self.l_annotation = QVBoxLayout()
 
-        self.rb_annotation_mode_click = QRadioButton("Click && Bounding Box")
+        self.rb_annotation_mode_click = QRadioButton("Click")
         self.rb_annotation_mode_click.setChecked(True)
         self.rb_annotation_mode_click.setToolTip(
             "Positive Click: Middle Mouse Button\n \n"
