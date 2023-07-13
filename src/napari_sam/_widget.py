@@ -31,11 +31,18 @@ from segment_anything import (
 from segment_anything.automatic_mask_generator import SamAutomaticMaskGenerator
 
 from mobile_sam import (
-    sam_model_registry,
-    SamAutomaticMaskGenerator as SamAutomaticMaskGeneratorMobile,
     SamPredictor as SamPredictorMobile,
     build_sam_vit_t
 )
+from mobile_sam.automatic_mask_generator import SamAutomaticMaskGenerator as SamAutomaticMaskGeneratorMobile
+
+from segment_anything_hq import (
+    SamPredictor as SamPredictorHQ,
+    build_sam_vit_h as build_sam_vit_h_hq,
+    build_sam_vit_l as build_sam_vit_l_hq,
+    build_sam_vit_b as build_sam_vit_b_hq,
+)
+from segment_anything_hq.automatic_mask_generator import SamAutomaticMaskGenerator as SamAutomaticMaskGeneratorHQ
 
 class SegmentationMode(Enum):
     SEMANTIC = 0
@@ -47,13 +54,17 @@ class BboxState(Enum):
     RELEASE = 2
 
 SAM_MODELS = {
-    "default": {"filename": "sam_vit_h_4b8939.pth", "url": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth", "model": build_sam_vit_h},
-    "vit_h": {"filename": "sam_vit_h_4b8939.pth", "url": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth", "model": build_sam_vit_h},
-    "vit_l": {"filename": "sam_vit_l_0b3195.pth", "url": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_l_0b3195.pth", "model": build_sam_vit_l},
-    "vit_b": {"filename": "sam_vit_b_01ec64.pth", "url": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth", "model": build_sam_vit_b},
-    "MedSAM": {"filename": "sam_vit_b_01ec64_medsam.pth", "url": "https://syncandshare.desy.de/index.php/s/yLfdFbpfEGSHJWY/download/medsam_20230423_vit_b_0.0.1.pth", "model": build_sam_vit_b},
-    "MobileSAM" : {"filename": "mobile_sam.pt", "url": "https://github.com/ChaoningZhang/MobileSAM/blob/master/weights/mobile_sam.pt?raw=true", "model": build_sam_vit_t}
+    "default": {"filename": "sam_vit_h_4b8939.pth", "url": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth", "model": build_sam_vit_h, "predctor": SamPredictor, "automatic_mask_generator": SamAutomaticMaskGenerator},
+    "vit_h": {"filename": "sam_vit_h_4b8939.pth", "url": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth", "model": build_sam_vit_h, "predctor": SamPredictor, "automatic_mask_generator": SamAutomaticMaskGenerator},
+    "vit_l": {"filename": "sam_vit_l_0b3195.pth", "url": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_l_0b3195.pth", "model": build_sam_vit_l, "predctor": SamPredictor, "automatic_mask_generator": SamAutomaticMaskGenerator},
+    "vit_b": {"filename": "sam_vit_b_01ec64.pth", "url": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth", "model": build_sam_vit_b, "predctor": SamPredictor, "automatic_mask_generator": SamAutomaticMaskGenerator},
+    "vit_h_hq": {"filename": "sam_hq_vit_h.pth", "url": "https://huggingface.co/lkeab/hq-sam/resolve/main/sam_hq_vit_h.pth", "model": build_sam_vit_h_hq, "predctor": SamPredictorHQ, "automatic_mask_generator": SamAutomaticMaskGeneratorHQ},
+    "vit_l_hq": {"filename": "sam_hq_vit_l.pth", "url": "https://huggingface.co/lkeab/hq-sam/resolve/main/sam_hq_vit_l.pth", "model": build_sam_vit_l_hq, "predctor": SamPredictorHQ, "automatic_mask_generator": SamAutomaticMaskGeneratorHQ},
+    "vit_b_hq": {"filename": "sam_hq_vit_b.pth", "url": "https://huggingface.co/lkeab/hq-sam/resolve/main/sam_hq_vit_b.pth", "model": build_sam_vit_b_hq, "predctor": SamPredictorHQ, "automatic_mask_generator": SamAutomaticMaskGeneratorHQ},
+    "MedSAM": {"filename": "sam_vit_b_01ec64_medsam.pth", "url": "https://syncandshare.desy.de/index.php/s/yLfdFbpfEGSHJWY/download/medsam_20230423_vit_b_0.0.1.pth", "model": build_sam_vit_b, "predctor": SamPredictor, "automatic_mask_generator": SamAutomaticMaskGenerator},
+    "MobileSAM" : {"filename": "mobile_sam.pt", "url": "https://github.com/ChaoningZhang/MobileSAM/blob/master/weights/mobile_sam.pt?raw=true", "model": build_sam_vit_t, "predctor": SamPredictorMobile, "automatic_mask_generator": SamAutomaticMaskGeneratorMobile}
 }
+
 
 class SamWidget(QWidget):
     def __init__(self, napari_viewer):
@@ -85,11 +96,9 @@ class SamWidget(QWidget):
         self.sam_model = SAM_MODELS[model_type]["model"](self.get_weights_path(model_type))
 
         self.sam_model.to(device)
-        if model_type == "MobileSAM":
-            self.sam_predictor = SamPredictorMobile(self.sam_model)
-            self.is_mobile_sam = True
-        else:
-            self.sam_predictor = SamPredictor(self.sam_model)
+        self.sam_predictor = SAM_MODELS[model_type]["predctor"](self.sam_model)
+        self.sam_model_type = model_type
+
 
     def get_weights_path(self, model_type):
         weight_url = SAM_MODELS[model_type]["url"]
@@ -205,10 +214,7 @@ class SamWidget(QWidget):
             'min_mask_region_area': int(self.ui_elements.le_minimum_mask_region_area.text()),
         }
 
-        if self.is_mobile_sam:
-            self.sam_anything_predictor = SamAutomaticMaskGeneratorMobile(self.sam_model, **shared_args)
-        else:
-            self.sam_anything_predictor = SamAutomaticMaskGenerator(self.sam_model, **shared_args)
+        self.sam_anything_predictor = SAM_MODELS[self.sam_model_type]["automatic_mask_generator"](self.sam_model, **shared_args)
 
         prediction = self.predict_everything()
         self.label_layer.data = prediction
