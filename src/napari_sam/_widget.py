@@ -73,7 +73,32 @@ class SamWidget(QWidget):
         self.viewer = napari_viewer
         self.ui_elements = UiElements(self.viewer)
 
+        # a list of all variables
+        ['_history_limit',
+        'check_prev_mask',
+        'image_layer',
+        'image_name',
+        'label_color_mapping',
+        'label_layer',
+        'point_size',
+        'points',
+        'points_labels',
+        'points_layer',
+        'sam_anything_predictor',
+        'sam_features',
+        'sam_logits',
+        'sam_model',
+        'sam_model_type',
+        'sam_predictor',
+        'temp_class_id',
+        'temp_label_layer']
 
+        # a list of variables that should be taken into consideration when deactivating/activating
+        ['check_prev_mask',
+        'sam_features']
+
+
+        self.debounced_on_contrast_limits_change = qdebounced(self.on_contrast_limits_change, timeout=1000)
         self.sam_model = None
         self.sam_predictor = None
         self.temp_class_id = 95 # corresponds to green color
@@ -98,7 +123,6 @@ class SamWidget(QWidget):
         self.sam_model.to(device)
         self.sam_predictor = SAM_MODELS[model_type]["predctor"](self.sam_model)
         self.sam_model_type = model_type
-
 
     def get_weights_path(self, model_type):
         weight_url = SAM_MODELS[model_type]["url"]
@@ -146,10 +170,13 @@ class SamWidget(QWidget):
     ################################ activating sam ################################
     def activate(self, annotator_mode):
         self.set_layers()
+        print(f"self.image_layer.data.shape: {self.image_layer.data.shape}") # TODO: DEBUG
+        # TODO: a better way to set point size
         if self.image_layer.ndim == 2:
             self.point_size = max(int(np.min(self.image_layer.data.shape[:2]) / 100), 1)
         else:
             self.point_size = 2
+
         self.adjust_image_layer_shape()
         self.check_image_dimension()
         self.set_sam_logits()
@@ -166,7 +193,8 @@ class SamWidget(QWidget):
         self.image_name = self.ui_elements.cb_input_image_selctor.currentText()
         self.image_layer = self.viewer.layers[self.ui_elements.cb_input_image_selctor.currentText()]
         self.label_layer = self.viewer.layers[self.ui_elements.cb_output_label_selctor.currentText()]
-        self.label_layer_changes = None
+        # TODO: maybe use for history
+        # self.label_layer_changes = None
 
     def adjust_image_layer_shape(self):
         if self.image_layer.ndim == 3:
@@ -200,7 +228,7 @@ class SamWidget(QWidget):
 
     #### auto
     def activate_annotation_mode_auto(self):
-        shared_args = {
+        args = {
             'points_per_side': int(self.ui_elements.le_points_per_side.text()),
             'points_per_batch': int(self.ui_elements.le_points_per_batch.text()),
             'pred_iou_thresh': float(self.ui_elements.le_prediction_iou_threshold.text()),
@@ -214,11 +242,10 @@ class SamWidget(QWidget):
             'min_mask_region_area': int(self.ui_elements.le_minimum_mask_region_area.text()),
         }
 
-        self.sam_anything_predictor = SAM_MODELS[self.sam_model_type]["automatic_mask_generator"](self.sam_model, **shared_args)
+        self.sam_anything_predictor = SAM_MODELS[self.sam_model_type]["automatic_mask_generator"](self.sam_model, **args)
 
         prediction = self.predict_everything()
         self.label_layer.data = prediction
-
 
     def predict_everything(self):
         contrast_limits = self.image_layer.contrast_limits
@@ -291,25 +318,29 @@ class SamWidget(QWidget):
                             next_slice[next_slice == label] = most_common_label
         return prediction
      """
-
+    
     #### click
     def activate_annotation_mode_click(self):
-            #self.create_label_color_mapping() TODO: add again
+            #TODO: add again
+            #self.create_label_color_mapping() 
 
-            """ TODO: add again when done with history
+            # TODO: add again when done with history
+            """ 
             with warnings.catch_warnings():
                 warnings.filterwarnings("ignore", category=FutureWarning)
                 self._history_limit = self.label_layer._history_limit
             self._reset_history()
              """
 
-            self.image_layer.events.contrast_limits.connect(qdebounced(self.on_contrast_limits_change, timeout=1000))
+            self.image_layer.events.contrast_limits.connect(self.debounced_on_contrast_limits_change)
             self.viewer.mouse_drag_callbacks.append(self.callback_click)
 
             self.set_image()
 
-            """ # TODO: add again
             self.viewer.keymap['Delete'] = self.on_delete
+            # TODO: add again
+            """ 
+            
             self.label_layer.keymap['Control-Z'] = self.on_undo
             self.label_layer.keymap['Control-Shift-Z'] = self.on_redo
              """
@@ -357,8 +388,6 @@ class SamWidget(QWidget):
 
     def on_contrast_limits_change(self):
         self.set_image()
-
-
 
     def callback_click(self, layer, event):
         """ decides what to do when a click is performed on the image and calls the corresponding function """
@@ -414,8 +443,8 @@ class SamWidget(QWidget):
             points = np.flip(points, axis=-1)
             labels = np.array(labels)
 
-
-            """ TODO: maybe use later
+            # TODO: maybe use later
+            """ 
             logits = self.sam_logits
             if not self.check_prev_mask.isChecked():
                 logits = None
@@ -451,7 +480,10 @@ class SamWidget(QWidget):
             labels = np.asarray(group_labels)
 
             self.sam_predictor.features = self.sam_features[x_coord]
-            #logits = self.sam_logits[x_coord] if not self.check_prev_mask.isChecked() else None TODO: maybe use later
+
+            # TODO: maybe use later
+            #logits = self.sam_logits[x_coord] if not self.check_prev_mask.isChecked() else None
+
             logits = None
             prediction_yz, _, self.sam_logits[x_coord] = self.sam_predictor.predict(
                 point_coords=points,
@@ -470,7 +502,7 @@ class SamWidget(QWidget):
 
     def update_points_layer(self):
         selected_layer = None
-
+        color_list = ["red" if i==0 else "blue" for i in self.points_labels]
         #save selected layer
         if self.viewer.layers.selection.active != self.points_layer:
             selected_layer = self.viewer.layers.selection.active
@@ -480,15 +512,13 @@ class SamWidget(QWidget):
             self.viewer.layers.remove(self.points_layer)
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=UserWarning)
-            self.points_layer = self.viewer.add_points(name="ignore this layer", data=np.asarray(self.points), size=self.point_size)
+            self.points_layer = self.viewer.add_points(name="ignore this layer", data=np.asarray(self.points), face_color=color_list, edge_color="white", size=self.point_size)
         self.points_layer.editable = False
         self.points_layer.refresh()
 
         #reselect selected layer
         if selected_layer is not None:
             self.viewer.layers.selection.active = selected_layer
-
-
 
     def update_label_layer(self,prediction, point_label, x_coord): # TODO: add 3D support
 
@@ -506,7 +536,6 @@ class SamWidget(QWidget):
 
         self.label_layer.data = label_layer
 
-
     def submit_to_class(self, class_id):
         self.points = []
         self.points_labels = []
@@ -521,8 +550,35 @@ class SamWidget(QWidget):
         self.label_layer.data = label_layer
         self.temp_label_layer = np.copy(label_layer)
 
-
     def deactivate(self):
-        pass
+        # 1. Remove event listeners
+        if hasattr(self, 'callback_click'):
+            if self.callback_click in self.viewer.mouse_drag_callbacks:
+                self.viewer.mouse_drag_callbacks.remove(self.callback_click)
 
-    
+        self.image_layer.events.contrast_limits.disconnect(self.debounced_on_contrast_limits_change)
+
+        # 2. Remove added layers
+        if hasattr(self, 'points_layer') and self.points_layer in self.viewer.layers:
+            self.viewer.layers.remove(self.points_layer)
+
+    def on_delete(self, layer):
+        selected_point = list(self.points_layer.selected_data)[0]
+        print(selected_point)
+        print(type(selected_point))
+        x_coord = None
+        if self.image_layer.ndim == 3:
+            x_coord = self.points[selected_point][0]
+        
+        self.points.pop(selected_point)
+        self.points_labels.pop(selected_point)
+        if len(self.points) != 0:
+            prediction = self.predict_sam(points=copy.deepcopy(self.points), 
+                                        labels=copy.deepcopy(self.points_labels), 
+                                        x_coord=copy.deepcopy(x_coord))
+        else:
+            prediction = np.zeros_like(self.label_layer.data)
+
+        self.update_points_layer()
+        self.update_label_layer(prediction, self.temp_class_id, x_coord)
+

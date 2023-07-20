@@ -150,7 +150,6 @@ class UiElements:
         self._init_main_layout()
         self._init_UI_signals()
 
-
     ################################ UI elements ################################
 
     def _init_main_layout(self):
